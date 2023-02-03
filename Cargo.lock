@@ -2768,6 +2768,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "snarkos-node-metrics"
+version = "2.0.2"
+dependencies = [
+ "metrics",
+ "metrics-exporter-prometheus",
+ "tokio",
+]
+
+[[package]]
 name = "snarkos-node-rest"
 version = "0.9.0"
 dependencies = [
