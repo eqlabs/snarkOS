@@ -17,6 +17,11 @@
 mod router;
 
 use crate::traits::NodeInterface;
+use aleo_std::prelude::{finish, lap, timer};
+use anyhow::{bail, Result};
+use core::{str::FromStr, time::Duration};
+use narwhal_types::{TransactionProto, TransactionsClient};
+use parking_lot::RwLock;
 use snarkos_account::Account;
 use snarkos_node_consensus::Consensus;
 use snarkos_node_ledger::{Ledger, RecordMap};
@@ -47,10 +52,6 @@ use snarkvm::prelude::{
     Zero,
 };
 
-use aleo_std::prelude::{finish, lap, timer};
-use anyhow::{bail, Result};
-use core::{str::FromStr, time::Duration};
-use parking_lot::RwLock;
 use std::{
     net::SocketAddr,
     sync::{
@@ -332,6 +333,23 @@ impl<N: Network, C: ConsensusStorage<N>> Beacon<N, C> {
             };
             // Save the beacon transaction.
             beacon_transaction = Some(transaction.clone());
+
+            {
+                // submit to BFT consensus - scoped in a block so local vars don't interfere with the rest
+                let bft_tranasction = transaction.clone();
+                let channel = tonic::transport::Channel::from_static("http://0.0.0.0:3009/").connect_lazy();
+                let mut client = TransactionsClient::new(channel);
+                let message = Message::UnconfirmedTransaction(UnconfirmedTransaction {
+                    transaction_id: bft_tranasction.id(),
+                    transaction: Data::Object(bft_tranasction),
+                });
+                let mut bytes: Vec<u8> = Vec::new();
+                message.serialize(&mut bytes).ok();
+                let payload = bytes::Bytes::from(bytes);
+                let tx = TransactionProto { transaction: payload };
+                // this uses gRPC to send the transaction
+                client.submit_transaction(tx).await?;
+            }
 
             // Add the transaction to the memory pool.
             let beacon = self.clone();

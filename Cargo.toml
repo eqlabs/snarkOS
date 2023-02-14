@@ -24,6 +24,7 @@ members = [
     "node",
     "node/cdn",
     "node/consensus",
+    "node/bft-consensus",
     "node/ledger",
     "node/messages",
     "node/metrics",
@@ -42,7 +43,7 @@ path = "snarkos/main.rs"
 #path = "../snarkVM"
 #git = "https://github.com/AleoHQ/snarkVM.git"
 #rev = "67f8829"
-version = "0.9.13"
+version = "=0.9.13"
 features = ["circuit", "console", "parallel"]
 
 [dependencies.anyhow]
