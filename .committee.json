@@ -1,0 +1,25 @@
+{
+    "authorities": {
+        "heAHsfh+EVSuRbc3lZgNpQOb7pfu4MmXcwszxy8SFMfGs2Kdu1S8jkzM6hVnjROADTXmcFd846WbtotsZzwRsKMI+M5/JczJM/p4CxH4Ek1MtH4jUH0DKF2SUSnULLGm": {
+            "network_key": "nsZTYmHBTkHe0A8g9o+repkKz0u+2ebPh0sStsALdEU=",
+            "primary_address": "/ip4/127.0.0.1/udp/3003",
+            "stake": 1
+        },
+        "jHqR7Xp3oiTApClFeSl7hYOw+CA9/3uOAlaUajHBr8/7DsGUurDfpIm+XNTB5jFDC4yGG5atLDxadA2QXDT8TAfRHo0B53IWpUghuwUtBJkgTR6dxyp7z4VkkqC/aoVZ": {
+            "network_key": "+eJYhEbQko36kpCupHdrYAmIkZCcxPYnQWRpTySBVGo=",
+            "primary_address": "/ip4/127.0.0.1/udp/3001",
+            "stake": 1
+        },
+        "oHsf0c6c61ii0EHdQY60CVvPRD5MqLoxHMEgwEjn5mTXexUhYiZ7MOn4KBm4yjRnFGjwjplH5JtBoW5z//5fZOc+FFLqbgzNRqYq/7FGzc8GnQJKBhHkrutkwuyRg1fC": {
+            "network_key": "Ya20X72W5+VBwWnEhUt8i5eooDO2ppXeJlN+swdN9VU=",
+            "primary_address": "/ip4/127.0.0.1/udp/3000",
+            "stake": 1
+        },
+        "qPNAm+fJ+XD/dKezbOaw4ygUxQC5REsFZAxJm9CbMBkCUoG7SGZ/ZRLk3/nli1WCCmpUsgvD9hRAPaSo6mUOAQK3NMjT9QM4Utv1NCqpMjZWp50SGC6LpWOj5Mq/41K9": {
+            "network_key": "h8RtlUq+y8q385lIdyxIE1RsftS9/zqWc/qzwjkoo0M=",
+            "primary_address": "/ip4/127.0.0.1/udp/3002",
+            "stake": 1
+        }
+    },
+    "epoch": 0
+}
