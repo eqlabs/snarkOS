@@ -18,6 +18,7 @@ mod router;
 
 use crate::traits::NodeInterface;
 use snarkos_account::Account;
+use snarkos_node_bft_consensus::BftConsensus;
 use snarkos_node_consensus::Consensus;
 use snarkos_node_ledger::Ledger;
 use snarkos_node_messages::{BlockRequest, Message, NodeType, PuzzleResponse, UnconfirmedSolution};
@@ -32,6 +33,7 @@ use snarkvm::prelude::{Block, ConsensusStorage, Header, Network, ProverSolution}
 use anyhow::Result;
 use parking_lot::Mutex;
 use std::{
+    borrow::BorrowMut,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -113,6 +115,16 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         node.initialize_routing().await;
         // Initialize the signal handler.
         node.handle_signals();
+
+        // start BFT consensus here
+        let bft = BftConsensus::new(1)?;
+        let h = tokio::spawn(async move {
+            let (primary, worker) = bft.start().await.unwrap();
+            primary.wait().await;
+            worker.wait().await;
+        });
+        node.handles.borrow_mut().lock().push(h);
+
         // Return the node.
         Ok(node)
     }

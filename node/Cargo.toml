@@ -62,6 +62,9 @@ path = "./cdn"
 [dependencies.snarkos-node-consensus]
 path = "./consensus"
 
+[dependencies.snarkos-node-bft-consensus]
+path = "./bft-consensus"
+
 [dependencies.snarkos-node-ledger]
 path = "./ledger"
 
