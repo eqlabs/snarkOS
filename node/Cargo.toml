@@ -20,6 +20,11 @@ edition = "2021"
 default = [ ]
 timer = [ "aleo-std/timer", "snarkos-node-ledger/timer" ]
 
+[dependencies] # added for BFT
+narwhal-types = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
+bytes = "1.4.0"
+tonic = "0.8.3"
+
 [dependencies.aleo-std]
 version = "0.1.15"
 default-features = false
@@ -61,6 +66,9 @@ path = "./cdn"
 
 [dependencies.snarkos-node-consensus]
 path = "./consensus"
+
+[dependencies.snarkos-node-bft-consensus]
+path = "./bft-consensus"
 
 [dependencies.snarkos-node-ledger]
 path = "./ledger"

@@ -1,0 +1,33 @@
+{
+    "epoch": 0,
+    "workers": {
+        "heAHsfh+EVSuRbc3lZgNpQOb7pfu4MmXcwszxy8SFMfGs2Kdu1S8jkzM6hVnjROADTXmcFd846WbtotsZzwRsKMI+M5/JczJM/p4CxH4Ek1MtH4jUH0DKF2SUSnULLGm": {
+            "0": {
+                "name": "qvz3PWu/9mF+ueDzl1V/G0IfJbSCEvhzLTjVJVYzwG4=",
+                "transactions": "/ip4/127.0.0.1/tcp/3015/http",
+                "worker_address": "/ip4/127.0.0.1/udp/3014"
+            }
+        },
+        "jHqR7Xp3oiTApClFeSl7hYOw+CA9/3uOAlaUajHBr8/7DsGUurDfpIm+XNTB5jFDC4yGG5atLDxadA2QXDT8TAfRHo0B53IWpUghuwUtBJkgTR6dxyp7z4VkkqC/aoVZ": {
+            "0": {
+                "name": "DRvs1MAgvpyE+ZbVjLUJGT9H2SB5OtgaJndfAAEcwk4=",
+                "transactions": "/ip4/127.0.0.1/tcp/3011/http",
+                "worker_address": "/ip4/127.0.0.1/udp/3010"
+            }
+        },
+        "oHsf0c6c61ii0EHdQY60CVvPRD5MqLoxHMEgwEjn5mTXexUhYiZ7MOn4KBm4yjRnFGjwjplH5JtBoW5z//5fZOc+FFLqbgzNRqYq/7FGzc8GnQJKBhHkrutkwuyRg1fC": {
+            "0": {
+                "name": "mu9WAYsmDPWm7QEzZyI6DWNWT3LS90OKI0r/bv176TQ=",
+                "transactions": "/ip4/127.0.0.1/tcp/3009/http",
+                "worker_address": "/ip4/127.0.0.1/udp/3008"
+            }
+        },
+        "qPNAm+fJ+XD/dKezbOaw4ygUxQC5REsFZAxJm9CbMBkCUoG7SGZ/ZRLk3/nli1WCCmpUsgvD9hRAPaSo6mUOAQK3NMjT9QM4Utv1NCqpMjZWp50SGC6LpWOj5Mq/41K9": {
+            "0": {
+                "name": "3L3P1kUcIBHOZ0ihpvgFuWmpISAGxL6qrxSe+ju3Rrc=",
+                "transactions": "/ip4/127.0.0.1/tcp/3013/http",
+                "worker_address": "/ip4/127.0.0.1/udp/3012"
+            }
+        }
+    }
+}
