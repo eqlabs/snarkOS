@@ -17,6 +17,10 @@
 mod router;
 
 use crate::traits::NodeInterface;
+use aleo_std::prelude::{finish, lap, timer};
+use anyhow::{bail, Result};
+use core::{str::FromStr, time::Duration};
+use parking_lot::RwLock;
 use snarkos_account::Account;
 use snarkos_node_consensus::Consensus;
 use snarkos_node_ledger::{Ledger, RecordMap};
@@ -326,7 +330,7 @@ impl<N: Network, C: ConsensusStorage<N>> Beacon<N, C> {
             if let Err(error) = beacon.consensus.check_next_block(&next_block) {
                 // Clear the memory pool of all solutions and transactions.
                 trace!("Clearing the memory pool...");
-                beacon.consensus.clear_memory_pool()?;
+                beacon.consensus.clear_memory_pool();
                 trace!("Cleared the memory pool");
                 bail!("Proposed an invalid block: {error}")
             }
@@ -366,7 +370,7 @@ impl<N: Network, C: ConsensusStorage<N>> Beacon<N, C> {
                 Err(error) => {
                     // Clear the memory pool of all solutions and transactions.
                     trace!("Clearing the memory pool...");
-                    beacon.consensus.clear_memory_pool()?;
+                    beacon.consensus.clear_memory_pool();
                     trace!("Cleared the memory pool");
                     bail!("Failed to advance to the next block: {error}")
                 }

@@ -23,6 +23,7 @@ use snarkos_node_messages::{
     DisconnectReason,
     Message,
     MessageCodec,
+    NewBlock,
     Ping,
     Pong,
 };
@@ -180,6 +181,12 @@ impl<N: Network, C: ConsensusStorage<N>> Inbound<N> for Beacon<N, C> {
             // Increment the latest height.
             latest_height += 1;
         }
+        true
+    }
+
+    /// Handles a `NewBlock` message.
+    fn new_block(&self, _peer_ip: SocketAddr, _block: Block<N>, _serialized: NewBlock<N>) -> bool {
+        // TODO: add more elaborate handling
         true
     }
 

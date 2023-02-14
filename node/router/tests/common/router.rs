@@ -20,6 +20,7 @@ use snarkos_node_messages::{
     DisconnectReason,
     Message,
     MessageCodec,
+    NewBlock,
     Ping,
     Pong,
     UnconfirmedSolution,
@@ -151,6 +152,11 @@ impl<N: Network> Inbound<N> for TestRouter<N> {
 
     /// Handles a `BlockResponse` message.
     fn block_response(&self, _peer_ip: SocketAddr, _blocks: Vec<Block<N>>) -> bool {
+        true
+    }
+
+    /// Handles a `NewBlock` message.
+    fn new_block(&self, _peer_ip: SocketAddr, _block: Block<N>, _serialized: NewBlock<N>) -> bool {
         true
     }
 

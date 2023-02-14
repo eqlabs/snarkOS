@@ -24,6 +24,7 @@ members = [
     "node",
     "node/cdn",
     "node/consensus",
+    "node/bft-consensus",
     "node/ledger",
     "node/messages",
     "node/metrics",
@@ -37,6 +38,14 @@ members = [
 [[bin]]
 name = "snarkos"
 path = "snarkos/main.rs"
+
+[workspace.dependencies]
+narwhal-types       = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
+narwhal-config      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-config" }
+narwhal-crypto      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-crypto" }
+narwhal-executor    = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-executor" }
+narwhal-node        = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-node"}
+narwhal-worker      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-worker"}
 
 [workspace.dependencies.snarkvm]
 #path = "../snarkVM"
