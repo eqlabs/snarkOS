@@ -128,7 +128,7 @@ impl BftConsensus {
                 self.committee.clone(),
                 self.worker_cache,
                 &self.w_store,
-                TrivialTransactionValidator::default(),
+                TrivialTransactionValidator::default(), // TODO: we probably want to do better than just accepting
                 None,
             )
             .await?;

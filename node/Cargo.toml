@@ -20,6 +20,12 @@ edition = "2021"
 default = [ ]
 timer = [ "aleo-std/timer", "snarkos-node-ledger/timer" ]
 
+[dependencies] # added for BFT
+types = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
+multiaddr = "0.17.0"
+mysten-network = { git = "https://github.com/eqlabs/bullshark-bft/" }
+bytes = "1.4.0"
+
 [dependencies.aleo-std]
 version = "0.1.15"
 default-features = false

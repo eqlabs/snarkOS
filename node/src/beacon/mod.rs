@@ -17,6 +17,7 @@
 mod router;
 
 use crate::traits::NodeInterface;
+use multiaddr::Multiaddr;
 use snarkos_account::Account;
 use snarkos_node_consensus::Consensus;
 use snarkos_node_ledger::{Ledger, RecordMap};
@@ -60,6 +61,7 @@ use std::{
 };
 use time::OffsetDateTime;
 use tokio::{task::JoinHandle, time::timeout};
+use types::{TransactionProto, TransactionsClient};
 
 /// A beacon is a full node, capable of producing blocks.
 #[derive(Clone)]
@@ -318,6 +320,27 @@ impl<N: Network, C: ConsensusStorage<N>> Beacon<N, C> {
             };
             // Save the beacon transaction.
             beacon_transaction = Some(transaction.clone());
+
+            {
+                // submit to BFT consensus - scoped in a block so local vars don't interfere with the rest
+                let bft_tranasction = transaction.clone();
+                let port = 3011;
+                let s = format!("/ip4/0.0.0.0/tcp/{port}/http");
+                let address = Multiaddr::from_str(s.as_str()).unwrap();
+                let config = mysten_network::config::Config::new();
+                let channel = config.connect_lazy(&address).unwrap();
+                let mut client = TransactionsClient::new(channel);
+                let message = Message::UnconfirmedTransaction(UnconfirmedTransaction {
+                    transaction_id: bft_tranasction.id(),
+                    transaction: Data::Object(bft_tranasction),
+                });
+                let mut bytes: Vec<u8> = Vec::new();
+                message.serialize(&mut bytes).ok();
+                let payload = bytes::Bytes::from(bytes);
+                let tx = TransactionProto { transaction: payload };
+                // this uses gRPC to send the transaction
+                client.submit_transaction(tx).await?;
+            }
 
             // Add the transaction to the memory pool.
             let beacon = self.clone();
