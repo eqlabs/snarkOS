@@ -117,7 +117,8 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         node.handle_signals();
 
         // start BFT consensus here
-        let bft = BftConsensus::new(1)?;
+        let id = node_ip.port() - 4130; // TODO: this only works in dev mode?
+        let bft = BftConsensus::new(id as u32)?;
         let h = tokio::spawn(async move {
             let (primary, worker) = bft.start().await.unwrap();
             primary.wait().await;
