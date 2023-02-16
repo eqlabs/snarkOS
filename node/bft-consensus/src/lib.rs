@@ -24,7 +24,8 @@ use eyre::Context;
 use fastcrypto::{
     bls12381::min_sig::BLS12381KeyPair,
     ed25519::Ed25519KeyPair,
-    traits::{EncodeDecodeBase64, KeyPair},
+    encoding::{Base64, Encoding},
+    traits::{EncodeDecodeBase64, KeyPair, ToFromBytes},
 };
 use mysten_metrics::RegistryService;
 use node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
@@ -177,7 +178,8 @@ impl ExecutionState for MyExecutionState {
 
 fn read_network_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Ed25519KeyPair> {
     let contents = std::fs::read_to_string(path)?;
-    Ed25519KeyPair::decode_base64(contents.as_str().trim()).map_err(|e| anyhow!(e))
+    let bytes = Base64::decode(contents.as_str()).map_err(|e| anyhow!("{}", e.to_string()))?;
+    Ed25519KeyPair::from_bytes(bytes.get(1..).unwrap()).map_err(|e| anyhow!(e))
 }
 
 fn read_authority_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<BLS12381KeyPair> {
