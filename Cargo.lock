@@ -4287,50 +4287,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "narwhal-test-utils"
-version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#9466d2be105814675d00d5470f26ad6cbde152eb"
-dependencies = [
- "anemo",
- "arc-swap",
- "base64 0.13.1",
- "bincode 1.3.3",
- "bytes",
- "derive_builder",
- "fastcrypto",
- "fdlimit",
- "futures",
- "indexmap",
- "itertools",
- "multiaddr",
- "mysten-metrics",
- "mysten-network",
- "narwhal-config",
- "narwhal-crypto",
- "narwhal-executor",
- "narwhal-network",
- "narwhal-node",
- "narwhal-primary",
- "narwhal-storage",
- "narwhal-types",
- "narwhal-worker",
- "once_cell",
- "prometheus",
- "rand 0.8.5",
- "serde",
- "telemetry-subscribers",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-util 0.7.7",
- "tonic",
- "tower",
- "tracing",
- "typed-store",
- "workspace-hack",
-]
-
-[[package]]
 name = "narwhal-types"
 version = "0.1.0"
 source = "git+https://github.com/eqlabs/bullshark-bft/#9466d2be105814675d00d5470f26ad6cbde152eb"
@@ -6727,14 +6683,11 @@ dependencies = [
  "narwhal-executor",
  "narwhal-node",
  "narwhal-storage",
- "narwhal-test-utils",
  "narwhal-types",
  "narwhal-worker",
  "prometheus",
  "rand 0.8.5",
  "serde",
- "sui-keys",
- "sui-types",
  "thiserror",
  "tokio",
  "tokio-util 0.7.7",

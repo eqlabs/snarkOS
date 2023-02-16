@@ -117,7 +117,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         node.handle_signals();
 
         // start BFT consensus here
-        // TODO: this only works in dev mode?
+        // TODO: this port trick only works in dev mode?
         let id = node_ip.port() - 4130 - 1; // - 1 as the beacon is on dev 0 (so 4130)
         let bft = BftConsensus::new(id as u32)?;
         let h = tokio::spawn(async move {

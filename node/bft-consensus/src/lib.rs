@@ -14,20 +14,22 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use config::{Committee, Import, Parameters, WorkerCache};
 use crypto::NetworkKeyPair;
 use executor::ExecutionState;
 use eyre::Context;
-use fastcrypto::traits::KeyPair;
+use fastcrypto::{
+    bls12381::min_sig::BLS12381KeyPair,
+    ed25519::Ed25519KeyPair,
+    traits::{EncodeDecodeBase64, KeyPair},
+};
 use mysten_metrics::RegistryService;
 use node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
 use prometheus::Registry;
 use std::sync::Arc;
-use sui_keys::keypair_file::{read_authority_keypair_from_file, read_network_keypair_from_file};
-use sui_types::crypto::AuthorityKeyPair;
 use thiserror::Error;
 use tracing::{debug, info};
 use types::ConsensusOutput;
@@ -35,7 +37,7 @@ use worker::TrivialTransactionValidator;
 
 pub struct BftConsensus {
     id: u32,
-    primary_keypair: AuthorityKeyPair,
+    primary_keypair: BLS12381KeyPair,
     network_keypair: NetworkKeyPair,
     worker_keypair: NetworkKeyPair,
     parameters: Parameters,
@@ -123,7 +125,7 @@ impl BftConsensus {
         let worker = WorkerNode::new(0, self.parameters.clone(), RegistryService::new(Registry::new()));
         worker
             .start(
-                primary_pub.clone(),
+                primary_pub,
                 self.worker_keypair,
                 self.committee.clone(),
                 self.worker_cache,
@@ -171,4 +173,14 @@ impl ExecutionState for MyExecutionState {
         // self.node.last_executed_sub_dag_index().await
         0
     }
+}
+
+fn read_network_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Ed25519KeyPair> {
+    let contents = std::fs::read_to_string(path)?;
+    Ed25519KeyPair::decode_base64(contents.as_str().trim()).map_err(|e| anyhow!(e))
+}
+
+fn read_authority_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<BLS12381KeyPair> {
+    let contents = std::fs::read_to_string(path)?;
+    BLS12381KeyPair::decode_base64(contents.as_str().trim()).map_err(|e| anyhow!(e))
 }
