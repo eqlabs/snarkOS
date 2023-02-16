@@ -17,7 +17,10 @@
 mod router;
 
 use crate::traits::NodeInterface;
-use multiaddr::Multiaddr;
+use aleo_std::prelude::{finish, lap, timer};
+use anyhow::{bail, Result};
+use core::{str::FromStr, time::Duration};
+use parking_lot::{Mutex, RwLock};
 use snarkos_account::Account;
 use snarkos_node_consensus::Consensus;
 use snarkos_node_ledger::{Ledger, RecordMap};
@@ -47,11 +50,6 @@ use snarkvm::prelude::{
     Value,
     Zero,
 };
-
-use aleo_std::prelude::{finish, lap, timer};
-use anyhow::{bail, Result};
-use core::{str::FromStr, time::Duration};
-use parking_lot::{Mutex, RwLock};
 use std::{
     net::SocketAddr,
     sync::{
@@ -324,11 +322,7 @@ impl<N: Network, C: ConsensusStorage<N>> Beacon<N, C> {
             {
                 // submit to BFT consensus - scoped in a block so local vars don't interfere with the rest
                 let bft_tranasction = transaction.clone();
-                let port = 3011;
-                let s = format!("/ip4/0.0.0.0/tcp/{port}/http");
-                let address = Multiaddr::from_str(s.as_str()).unwrap();
-                let config = mysten_network::config::Config::new();
-                let channel = config.connect_lazy(&address).unwrap();
+                let channel = tonic::transport::Channel::from_static("http://0.0.0.0:3009/").connect_lazy();
                 let mut client = TransactionsClient::new(channel);
                 let message = Message::UnconfirmedTransaction(UnconfirmedTransaction {
                     transaction_id: bft_tranasction.id(),

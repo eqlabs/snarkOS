@@ -5714,8 +5714,6 @@ dependencies = [
  "deadline",
  "futures-util",
  "indexmap",
- "multiaddr",
- "mysten-network",
  "narwhal-types",
  "num_cpus",
  "parking_lot 0.12.1",
@@ -5737,6 +5735,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util 0.7.7",
+ "tonic",
  "tracing",
  "tracing-subscriber 0.3.16",
 ]
@@ -5752,7 +5751,6 @@ dependencies = [
  "bytes",
  "eyre",
  "fastcrypto",
- "multiaddr",
  "mysten-metrics",
  "narwhal-config",
  "narwhal-consensus",
@@ -5769,7 +5767,6 @@ dependencies = [
  "tokio",
  "tokio-util 0.7.7",
  "tracing",
- "tracing-subscriber 0.3.16",
  "typed-store",
 ]
 

@@ -11,7 +11,6 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1.36"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # below are the dependencies for BFT
 consensus = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-consensus", features = ["benchmark"]  }
@@ -26,7 +25,6 @@ store = { git = "https://github.com/eqlabs/bullshark-bft/", package = "typed-sto
 mysten-metrics = { git = "https://github.com/eqlabs/bullshark-bft/" }
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "235211dc8195590f5353d38135f5ee51a267521e" }
 rand = { version = "0.8.5", features = ["small_rng"] }
-multiaddr = "0.17"
 prometheus = "0.13"
 arc-swap = "1.5.1"
 eyre = "0.6.8"
