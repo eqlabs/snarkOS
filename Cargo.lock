@@ -5011,11 +5011,9 @@ dependencies = [
  "fastcrypto",
  "mysten-metrics",
  "narwhal-config",
- "narwhal-consensus",
  "narwhal-crypto",
  "narwhal-executor",
  "narwhal-node",
- "narwhal-storage",
  "narwhal-types",
  "narwhal-worker",
  "prometheus",
@@ -5025,7 +5023,6 @@ dependencies = [
  "tokio",
  "tokio-util 0.7.7",
  "tracing",
- "typed-store",
 ]
 
 [[package]]
