@@ -13,15 +13,12 @@ tokio-util = "0.7"
 tracing = "0.1.36"
 
 # below are the dependencies for BFT
-consensus = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-consensus", features = ["benchmark"]  }
-config = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-config" }
-crypto = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-crypto" }
-executor = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-executor" }
-node = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-node", features = ["benchmark"]  }
-worker = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-worker", features = ["benchmark"] }
-types = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
-storage = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-storage" }
-store = { git = "https://github.com/eqlabs/bullshark-bft/", package = "typed-store" }
+narwhal-config = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-config" }
+narwhal-crypto = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-crypto" }
+narwhal-executor = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-executor" }
+narwhal-node = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-node", features = ["benchmark"]  }
+narwhal-worker = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-worker", features = ["benchmark"] }
+narwhal-types = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
 mysten-metrics = { git = "https://github.com/eqlabs/bullshark-bft/" }
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "235211dc8195590f5353d38135f5ee51a267521e" }
 rand = { version = "0.8.5", features = ["small_rng"] }

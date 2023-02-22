@@ -17,9 +17,6 @@
 use anyhow::{anyhow, Result};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
-use config::{Committee, Import, Parameters, WorkerCache};
-use crypto::NetworkKeyPair;
-use executor::ExecutionState;
 use eyre::Context;
 use fastcrypto::{
     bls12381::min_sig::BLS12381KeyPair,
@@ -28,13 +25,16 @@ use fastcrypto::{
     traits::{EncodeDecodeBase64, KeyPair, ToFromBytes},
 };
 use mysten_metrics::RegistryService;
-use node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
+use narwhal_config::{Committee, Import, Parameters, WorkerCache};
+use narwhal_crypto::NetworkKeyPair;
+use narwhal_executor::ExecutionState;
+use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
+use narwhal_types::ConsensusOutput;
+use narwhal_worker::TrivialTransactionValidator;
 use prometheus::Registry;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info};
-use types::ConsensusOutput;
-use worker::TrivialTransactionValidator;
 
 pub struct BftConsensus {
     id: u32,

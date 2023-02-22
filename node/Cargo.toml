@@ -21,7 +21,7 @@ default = [ ]
 timer = [ "aleo-std/timer", "snarkos-node-ledger/timer" ]
 
 [dependencies] # added for BFT
-types = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
+narwhal-types = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
 bytes = "1.4.0"
 tonic = "0.8.3"
 
