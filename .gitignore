@@ -6,3 +6,5 @@ wasm/Cargo.lock
 **/build
 **.ledger-*
 .db*
+beacon.log
+validator*.log
