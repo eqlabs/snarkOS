@@ -33,7 +33,6 @@ use snarkvm::prelude::{Block, ConsensusStorage, Header, Network, ProverSolution}
 use anyhow::Result;
 use parking_lot::RwLock;
 use std::{
-    borrow::BorrowMut,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -116,16 +115,23 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         // Initialize the signal handler.
         node.handle_signals();
 
-        // start BFT consensus here
+        // Start the BFT consensus here
         // TODO: this port trick only works in dev mode?
         let id = node_ip.port() - 4130 - 1; // - 1 as the beacon is on dev 0 (so 4130)
         let bft = BftConsensus::new(id as u32)?;
-        let h = tokio::spawn(async move {
-            let (primary, worker) = bft.start().await.unwrap();
+        let (primary, worker) = bft.start().await.unwrap();
+
+        // Start the primary.
+        let handle_primary = tokio::spawn(async move {
             primary.wait().await;
+        });
+        node.handles.write().push(handle_primary);
+
+        // Start the worker.
+        let handle_worker = tokio::spawn(async move {
             worker.wait().await;
         });
-        node.handles.borrow_mut().write().push(h);
+        node.handles.write().push(handle_worker);
 
         // Return the node.
         Ok(node)
