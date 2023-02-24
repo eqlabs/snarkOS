@@ -14,9 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
+use bytes::BytesMut;
 use eyre::Context;
 use fastcrypto::{
     bls12381::min_sig::BLS12381KeyPair,
@@ -29,14 +30,17 @@ use narwhal_config::{Committee, Import, Parameters, WorkerCache};
 use narwhal_crypto::NetworkKeyPair;
 use narwhal_executor::ExecutionState;
 use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
-use narwhal_types::ConsensusOutput;
-use narwhal_worker::TrivialTransactionValidator;
+use narwhal_types::{Batch, ConsensusOutput};
 use prometheus::Registry;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, info};
 
-pub struct BftConsensus {
+use snarkos_node_consensus::Consensus as AleoConsensus;
+use snarkos_node_messages::Message;
+use snarkvm::prelude::{ConsensusStorage, Network};
+
+pub struct BftConsensus<N: Network, C: ConsensusStorage<N>> {
     id: u32,
     primary_keypair: BLS12381KeyPair,
     network_keypair: NetworkKeyPair,
@@ -46,6 +50,7 @@ pub struct BftConsensus {
     w_store: NodeStorage,
     committee: Arc<ArcSwap<Committee>>,
     worker_cache: Arc<ArcSwap<WorkerCache>>,
+    aleo_consensus: AleoConsensus<N, C>,
 }
 
 #[derive(Error, Debug)]
@@ -54,8 +59,8 @@ pub enum BftError {
     EyreReport(String),
 }
 
-impl BftConsensus {
-    pub fn new(id: u32) -> Result<Self> {
+impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
+    pub fn new(id: u32, aleo_consensus: AleoConsensus<N, C>) -> Result<Self> {
         let primary_key_file = format!(".primary-{id}-key.json");
         let primary_keypair =
             read_authority_keypair_from_file(primary_key_file).expect("Failed to load the node's primary keypair");
@@ -101,6 +106,7 @@ impl BftConsensus {
             w_store,
             committee,
             worker_cache,
+            aleo_consensus,
         })
     }
 
@@ -131,7 +137,7 @@ impl BftConsensus {
                 self.committee.clone(),
                 self.worker_cache,
                 &self.w_store,
-                TrivialTransactionValidator::default(), // TODO: we probably want to do better than just accepting
+                TransactionValidator(self.aleo_consensus),
                 None,
             )
             .await?;
@@ -185,4 +191,38 @@ fn read_network_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow:
 fn read_authority_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<BLS12381KeyPair> {
     let contents = std::fs::read_to_string(path)?;
     BLS12381KeyPair::decode_base64(contents.as_str().trim()).map_err(|e| anyhow!(e))
+}
+
+#[derive(Clone)]
+struct TransactionValidator<N: Network, C: ConsensusStorage<N>>(AleoConsensus<N, C>);
+
+impl<N: Network, C: ConsensusStorage<N>> narwhal_worker::TransactionValidator for TransactionValidator<N, C> {
+    type Error = anyhow::Error;
+
+    /// Determines if a transaction valid for the worker to consider putting in a batch
+    fn validate(&self, transaction: &[u8]) -> Result<(), Self::Error> {
+        let bytes = BytesMut::from(transaction);
+        let message = Message::deserialize(bytes)?;
+
+        let unconfirmed_transaction = if let Message::UnconfirmedTransaction(unconfirmed_transaction) = message {
+            unconfirmed_transaction
+        } else {
+            bail!("[UnconfirmedTransaction] Expected Message::UnconfirmedTransaction, got {:?}", message.name());
+        };
+
+        let transaction = match unconfirmed_transaction.transaction.deserialize_blocking() {
+            Ok(transaction) => transaction,
+            Err(error) => bail!("[UnconfirmedTransaction] {error}"),
+        };
+        self.0.add_unconfirmed_transaction(transaction)?;
+
+        Ok(())
+    }
+
+    /// Determines if this batch can be voted on
+    fn validate_batch(&self, _batch: &Batch) -> Result<(), Self::Error> {
+        // TODO: do we need to validate batches?
+
+        Ok(())
+    }
 }
