@@ -8,3 +8,4 @@ wasm/Cargo.lock
 .db*
 beacon.log
 validator*.log
+.vscode
