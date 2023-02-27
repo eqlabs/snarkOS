@@ -106,7 +106,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
 
         // Initialize the REST server.
         if let Some(rest_ip) = rest_ip {
-            node.rest = Some(Arc::new(Rest::start(rest_ip, Some(consensus), ledger, Arc::new(node.clone()))?));
+            node.rest = Some(Arc::new(Rest::start(rest_ip, Some(consensus.clone()), ledger, Arc::new(node.clone()))?));
         }
         // Initialize the sync pool.
         node.initialize_sync()?;
@@ -118,7 +118,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         // Start the BFT consensus here
         // TODO: this port trick only works in dev mode?
         let id = node_ip.port() - 4130 - 1; // - 1 as the beacon is on dev 0 (so 4130)
-        let bft = BftConsensus::new(id as u32)?;
+        let bft = BftConsensus::new(id as u32, consensus)?;
         let (primary, worker) = bft.start().await.unwrap();
 
         // Start the primary.

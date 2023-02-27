@@ -11,6 +11,9 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1.36"
+snarkos-node-consensus = { path = "../consensus" }
+snarkos-node-messages = { path = "../messages" }
+snarkvm = { workspace = true }
 
 # below are the dependencies for BFT
 narwhal-config = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-config" }

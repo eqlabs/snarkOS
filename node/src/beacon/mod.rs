@@ -336,12 +336,12 @@ impl<N: Network, C: ConsensusStorage<N>> Beacon<N, C> {
 
             {
                 // submit to BFT consensus - scoped in a block so local vars don't interfere with the rest
-                let bft_tranasction = transaction.clone();
+                let bft_transaction = transaction.clone();
                 let channel = tonic::transport::Channel::from_static("http://0.0.0.0:3009/").connect_lazy();
                 let mut client = TransactionsClient::new(channel);
                 let message = Message::UnconfirmedTransaction(UnconfirmedTransaction {
-                    transaction_id: bft_tranasction.id(),
-                    transaction: Data::Object(bft_tranasction),
+                    transaction_id: transaction.id(),
+                    transaction: Data::Object(bft_transaction),
                 });
                 let mut bytes: Vec<u8> = Vec::new();
                 message.serialize(&mut bytes).ok();
