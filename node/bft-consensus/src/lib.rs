@@ -220,8 +220,12 @@ impl<N: Network, C: ConsensusStorage<N>> narwhal_worker::TransactionValidator fo
     }
 
     /// Determines if this batch can be voted on
-    fn validate_batch(&self, _batch: &Batch) -> Result<(), Self::Error> {
-        // TODO: do we need to validate batches?
+    fn validate_batch(&self, batch: &Batch) -> Result<(), Self::Error> {
+        // TODO: once the beacon is no longer the source of the transactions, batch validation
+        // might need to be disabled to avoid double validation.
+        for transaction in &batch.transactions {
+            self.validate(transaction)?;
+        }
 
         Ok(())
     }
