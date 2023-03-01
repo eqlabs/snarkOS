@@ -34,8 +34,9 @@ use narwhal_types::{Batch, ConsensusOutput};
 use prometheus::Registry;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, info};
+use tracing::*;
 
+use snarkos_account::Account;
 use snarkos_node_consensus::Consensus as AleoConsensus;
 use snarkos_node_messages::Message;
 use snarkvm::prelude::{ConsensusStorage, Network};
@@ -51,6 +52,7 @@ pub struct BftConsensus<N: Network, C: ConsensusStorage<N>> {
     committee: Arc<ArcSwap<Committee>>,
     worker_cache: Arc<ArcSwap<WorkerCache>>,
     aleo_consensus: AleoConsensus<N, C>,
+    aleo_account: Account<N>,
 }
 
 #[derive(Error, Debug)]
@@ -60,7 +62,7 @@ pub enum BftError {
 }
 
 impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
-    pub fn new(id: u32, aleo_consensus: AleoConsensus<N, C>) -> Result<Self> {
+    pub fn new(id: u32, aleo_account: Account<N>, aleo_consensus: AleoConsensus<N, C>) -> Result<Self> {
         let primary_key_file = format!(".primary-{id}-key.json");
         let primary_keypair =
             read_authority_keypair_from_file(primary_key_file).expect("Failed to load the node's primary keypair");
@@ -107,6 +109,7 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
             committee,
             worker_cache,
             aleo_consensus,
+            aleo_account,
         })
     }
 
@@ -123,7 +126,7 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
                 self.committee.clone(),
                 self.worker_cache.clone(),
                 &self.p_store,
-                Arc::new(MyExecutionState::new(self.id)),
+                Arc::new(MyExecutionState::new(self.id, self.aleo_account, self.aleo_consensus.clone())),
             )
             .await?;
 
@@ -147,18 +150,20 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
     }
 }
 
-pub struct MyExecutionState {
+pub struct MyExecutionState<N: Network, C: ConsensusStorage<N>> {
     id: u32,
+    account: Account<N>,
+    consensus: AleoConsensus<N, C>,
 }
 
-impl MyExecutionState {
-    pub(crate) fn new(id: u32) -> Self {
-        Self { id }
+impl<N: Network, C: ConsensusStorage<N>> MyExecutionState<N, C> {
+    pub(crate) fn new(id: u32, account: Account<N>, consensus: AleoConsensus<N, C>) -> Self {
+        Self { id, account, consensus }
     }
 }
 
 #[async_trait]
-impl ExecutionState for MyExecutionState {
+impl<N: Network, C: ConsensusStorage<N>> ExecutionState for MyExecutionState<N, C> {
     /// Receive the consensus result with the ordered transactions in `ConsensusOutupt`
     async fn handle_consensus_output(&self, consensus_output: ConsensusOutput) {
         if !consensus_output.batches.is_empty() {
@@ -169,8 +174,104 @@ impl ExecutionState for MyExecutionState {
                 consensus_output.batches.len(),
                 consensus_output.sub_dag.leader.header.author,
             );
-            // TODO: get the output to snarkOS
-            // self.node.save_consensus(consensus_output).await;
+
+            /*
+            TODO: the following generally works, but there are some open points
+                1. currently, only blocks produced by the beacon are considered valid
+                2. can the Aleo mempool have a different set of transactions than ones accepted by the consensus?
+                3. we can't fail here, i.e. the checks by the TransactionValidator must be final
+                4. every validator can create a block, but should they? the downstream can create it on its own too
+
+            let consensus = self.consensus.clone();
+            let account = self.account.clone();
+            let next_block = tokio::task::spawn_blocking(move || {
+                // Collect all the transactions contained in the agreed upon batches.
+                let mut transactions = Vec::new();
+                for batch in consensus_output.batches {
+                    for batch in batch.1 {
+                        for transaction in batch.transactions {
+                            let bytes = BytesMut::from(&transaction[..]);
+                            // TransactionValidator ensures that the Message can be deserialized.
+                            let message = Message::<N>::deserialize(bytes).unwrap();
+
+                            let unconfirmed_transaction =
+                                if let Message::UnconfirmedTransaction(unconfirmed_transaction) = message {
+                                    unconfirmed_transaction
+                                } else {
+                                    // TransactionValidator ensures that the Message is an UnconfirmedTransaction.
+                                    unreachable!();
+                                };
+
+                            // TransactionValidator ensures that the Message can be deserialized.
+                            let transaction = unconfirmed_transaction.transaction.deserialize_blocking().unwrap();
+
+                            transactions.push(transaction);
+                        }
+                    }
+                }
+
+                // Attempt to add the batched transactions to the Aleo mempool.
+                let mut num_valid_txs = 0;
+                for transaction in transactions {
+                    // Skip invalid transactions.
+                    if consensus.add_unconfirmed_transaction(transaction).is_ok() {
+                        num_valid_txs += 1;
+                    }
+                }
+
+                // Return early if there are no valid transactions.
+                if num_valid_txs == 0 {
+                    debug!("No valid transactions in ConsensusOutput; not producing a block.");
+                    return Ok(None);
+                }
+
+                // Propose a new block.
+                let next_block = match consensus.propose_next_block(account.private_key(), &mut rand::thread_rng()) {
+                    Ok(block) => block,
+                    Err(error) => bail!("Failed to propose the next block: {error}"),
+                };
+
+                // Ensure the block is a valid next block.
+                if let Err(error) = consensus.check_next_block(&next_block) {
+                    // Clear the memory pool of all solutions and transactions.
+                    consensus.clear_memory_pool();
+                    bail!("Proposed an invalid block: {error}");
+                }
+
+                // Advance to the next block.
+                match consensus.advance_to_next_block(&next_block) {
+                    Ok(()) => {
+                        // Log the next block.
+                        match serde_json::to_string_pretty(&next_block.header()) {
+                            Ok(header) => info!("Block {}: {header}", next_block.height()),
+                            Err(error) => info!("Block {}: (serde failed: {error})", next_block.height()),
+                        }
+                    }
+                    Err(error) => {
+                        // Clear the memory pool of all solutions and transactions.
+                        consensus.clear_memory_pool();
+                        bail!("Failed to advance to the next block: {error}");
+                    }
+                }
+
+                Ok(Some(next_block))
+            })
+            .await;
+
+            let next_block = match next_block.map_err(|err| err.into()) {
+                Ok(Ok(Some(block))) => block,
+                Ok(Ok(None)) => return,
+                Ok(Err(error)) | Err(error) => {
+                    error!("Failed to produce a new block: {error}");
+                    return;
+                }
+            };
+
+            info!(
+                "Produced a block with the following txs: {:?}",
+                next_block.transactions().iter().map(|tx| tx.id()).collect::<Vec<_>>()
+            );
+            */
         }
     }
 
@@ -214,7 +315,8 @@ impl<N: Network, C: ConsensusStorage<N>> narwhal_worker::TransactionValidator fo
             Ok(transaction) => transaction,
             Err(error) => bail!("[UnconfirmedTransaction] {error}"),
         };
-        self.0.add_unconfirmed_transaction(transaction)?;
+
+        self.0.check_transaction_basic(&transaction)?;
 
         Ok(())
     }
