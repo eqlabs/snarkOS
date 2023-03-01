@@ -16,7 +16,8 @@
     "header_num_of_batches_threshold": 32,
     "max_batch_delay": "200ms",
     "max_concurrent_requests": 500000,
-    "max_header_delay": "2000ms",
+    "min_header_delay": "15_000ms",
+    "max_header_delay": "20_000ms",
     "max_header_num_of_batches": 1000,
     "network_admin_server": {
         "primary_network_admin_server_port": 0,

@@ -4924,6 +4924,8 @@ dependencies = [
  "prometheus",
  "rand",
  "serde",
+ "serde_json",
+ "snarkos-account",
  "snarkos-node-consensus",
  "snarkos-node-messages",
  "snarkvm",
