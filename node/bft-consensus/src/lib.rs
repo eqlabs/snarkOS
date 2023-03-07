@@ -25,13 +25,11 @@ use fastcrypto::{
     encoding::{Base64, Encoding},
     traits::{EncodeDecodeBase64, KeyPair, ToFromBytes},
 };
-use mysten_metrics::RegistryService;
 use narwhal_config::{Committee, Import, Parameters, WorkerCache};
 use narwhal_crypto::NetworkKeyPair;
 use narwhal_executor::ExecutionState;
 use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
 use narwhal_types::{Batch, ConsensusOutput};
-use prometheus::Registry;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::*;
@@ -118,7 +116,7 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
     /// caller must call `wait().await` on primary and worker
     pub async fn start(self) -> Result<(PrimaryNode, WorkerNode)> {
         let primary_pub = self.primary_keypair.public().clone();
-        let primary = PrimaryNode::new(self.parameters.clone(), true, RegistryService::new(Registry::new()));
+        let primary = PrimaryNode::new(self.parameters.clone(), true);
         primary
             .start(
                 self.primary_keypair,
@@ -132,7 +130,7 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
 
         info!("created primary id {}", self.id);
 
-        let worker = WorkerNode::new(0, self.parameters.clone(), RegistryService::new(Registry::new()));
+        let worker = WorkerNode::new(0, self.parameters.clone());
         worker
             .start(
                 primary_pub,
@@ -141,7 +139,6 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
                 self.worker_cache,
                 &self.w_store,
                 TransactionValidator(self.aleo_consensus),
-                None,
             )
             .await?;
         info!("created worker id {}", self.id);
@@ -176,12 +173,12 @@ impl<N: Network, C: ConsensusStorage<N>> ExecutionState for MyExecutionState<N, 
             );
 
             /*
-            TODO: the following generally works, but there are some open points
-                1. currently, only blocks produced by the beacon are considered valid
-                2. can the Aleo mempool have a different set of transactions than ones accepted by the consensus?
-                3. we can't fail here, i.e. the checks by the TransactionValidator must be final
-                4. every validator can create a block, but should they? the downstream can create it on its own too
-
+                        TODO: the following generally works, but there are some open points
+                            1. currently, only blocks produced by the beacon are considered valid
+                            2. can the Aleo mempool have a different set of transactions than ones accepted by the consensus?
+                            3. we can't fail here, i.e. the checks by the TransactionValidator must be final
+                            4. every validator can create a block, but should they? the downstream can create it on its own too
+            */
             let consensus = self.consensus.clone();
             let account = self.account.clone();
             let next_block = tokio::task::spawn_blocking(move || {
@@ -271,7 +268,6 @@ impl<N: Network, C: ConsensusStorage<N>> ExecutionState for MyExecutionState<N, 
                 "Produced a block with the following txs: {:?}",
                 next_block.transactions().iter().map(|tx| tx.id()).collect::<Vec<_>>()
             );
-            */
         }
     }
 
