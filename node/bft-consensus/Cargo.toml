@@ -24,7 +24,6 @@ narwhal-executor = { git = "https://github.com/eqlabs/bullshark-bft/", package =
 narwhal-node = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-node"}
 narwhal-worker = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-worker"}
 narwhal-types = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types" }
-mysten-metrics = { git = "https://github.com/eqlabs/bullshark-bft/" }
 fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "235211dc8195590f5353d38135f5ee51a267521e" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 prometheus = "0.13"
