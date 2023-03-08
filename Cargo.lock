@@ -886,21 +886,6 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "2.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
-dependencies = [
- "ansi_term",
- "atty",
- "bitflags",
- "strsim 0.8.0",
- "textwrap 0.11.0",
- "unicode-width",
- "vec_map",
-]
-
-[[package]]
-name = "clap"
 version = "3.2.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71655c45cb9845d3270c9d6df84ebe72b4dad3c2ba3f7023ad47c144e4e473a5"
@@ -911,9 +896,9 @@ dependencies = [
  "clap_lex",
  "indexmap",
  "once_cell",
- "strsim 0.10.0",
+ "strsim",
  "termcolor",
- "textwrap 0.16.0",
+ "textwrap",
 ]
 
 [[package]]
@@ -1304,7 +1289,7 @@ dependencies = [
  "ident_case",
  "proc-macro2 1.0.51",
  "quote 1.0.23",
- "strsim 0.10.0",
+ "strsim",
  "syn 1.0.107",
 ]
 
@@ -2462,9 +2447,9 @@ checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
 
 [[package]]
 name = "librocksdb-sys"
-version = "0.8.3+7.4.4"
+version = "0.10.0+7.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "557b255ff04123fcc176162f56ed0c9cd42d8f357cf55b3fabeb60f7413741b3"
+checksum = "0fe4d5874f5ff2bc616e55e8c6086d478fcda13faf9495768a4aa1c22042d30b"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -2472,6 +2457,7 @@ dependencies = [
  "glob",
  "libc",
  "libz-sys",
+ "lz4-sys",
 ]
 
 [[package]]
@@ -2524,6 +2510,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "lz4-sys"
+version = "1.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57d27b317e207b10f69f5e75494119e391a96f48861ae870d1da6edac98ca900"
+dependencies = [
+ "cc",
+ "libc",
 ]
 
 [[package]]
@@ -2807,7 +2803,7 @@ dependencies = [
 [[package]]
 name = "mysten-network"
 version = "0.2.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "bincode 1.3.3",
  "bytes",
@@ -2828,7 +2824,7 @@ dependencies = [
 [[package]]
 name = "mysten-util-mem"
 version = "0.11.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "cfg-if",
  "ed25519-consensus",
@@ -2846,7 +2842,7 @@ dependencies = [
 [[package]]
 name = "mysten-util-mem-derive"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "proc-macro2 1.0.51",
  "syn 1.0.107",
@@ -2856,7 +2852,7 @@ dependencies = [
 [[package]]
 name = "narwhal-config"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "arc-swap",
  "fastcrypto",
@@ -2874,7 +2870,7 @@ dependencies = [
 [[package]]
 name = "narwhal-consensus"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "arc-swap",
  "bincode 1.3.3",
@@ -2899,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "narwhal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "eyre",
  "fastcrypto",
@@ -2917,7 +2913,7 @@ dependencies = [
 [[package]]
 name = "narwhal-dag"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "arc-swap",
  "dashmap",
@@ -2934,7 +2930,7 @@ dependencies = [
 [[package]]
 name = "narwhal-executor"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -2970,7 +2966,7 @@ dependencies = [
 [[package]]
 name = "narwhal-network"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -3000,7 +2996,7 @@ dependencies = [
 [[package]]
 name = "narwhal-node"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "anemo",
  "anyhow",
@@ -3010,7 +3006,7 @@ dependencies = [
  "bincode 1.3.3",
  "bytes",
  "cfg-if",
- "clap 2.34.0",
+ "clap",
  "derive_more",
  "eyre",
  "fail",
@@ -3030,7 +3026,6 @@ dependencies = [
  "narwhal-worker",
  "once_cell",
  "rand",
- "reqwest",
  "roaring",
  "schemars",
  "serde",
@@ -3051,7 +3046,7 @@ dependencies = [
 [[package]]
 name = "narwhal-primary"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -3095,7 +3090,7 @@ dependencies = [
 [[package]]
 name = "narwhal-storage"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "dashmap",
  "fail",
@@ -3116,7 +3111,7 @@ dependencies = [
 [[package]]
 name = "narwhal-types"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "anemo",
  "anemo-build",
@@ -3158,14 +3153,13 @@ dependencies = [
 [[package]]
 name = "narwhal-worker"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "anemo",
  "anemo-tower",
  "anyhow",
  "async-trait",
  "bincode 1.3.3",
- "byteorder",
  "bytes",
  "eyre",
  "fastcrypto",
@@ -4215,9 +4209,9 @@ dependencies = [
 
 [[package]]
 name = "rocksdb"
-version = "0.19.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e9562ea1d70c0cc63a34a22d977753b50cca91cc6b6527750463bd5dd8697bc"
+checksum = "015439787fce1e75d55f279078d33ff14b4af5d93d995e8838ee4631301c8a99"
 dependencies = [
  "libc",
  "librocksdb-sys",
@@ -4802,7 +4796,7 @@ name = "snarkos"
 version = "2.0.2"
 dependencies = [
  "anyhow",
- "clap 3.2.23",
+ "clap",
  "rusty-hook",
  "snarkos-account",
  "snarkos-cli",
@@ -4835,7 +4829,7 @@ version = "2.0.2"
 dependencies = [
  "aleo-std",
  "anyhow",
- "clap 3.2.23",
+ "clap",
  "colored",
  "crossterm 0.26.1",
  "indexmap",
@@ -5126,7 +5120,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59bc826fb94e0240a58cc627d1d4795cf02856e87ea47e315c983d1c5e3e0f89"
 dependencies = [
  "anyhow",
- "clap 3.2.23",
+ "clap",
  "colored",
  "indexmap",
  "once_cell",
@@ -5764,12 +5758,6 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
-
-[[package]]
-name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
@@ -5855,11 +5843,10 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "telemetry-subscribers"
 version = "0.2.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "crossterm 0.25.0",
  "once_cell",
- "prometheus",
  "tracing",
  "tracing-appender",
  "tracing-subscriber 0.3.16",
@@ -5892,15 +5879,6 @@ name = "termtree"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95059e91184749cb66be6dc994f67f182b6d897cb3df74a5bf66b5e709295fd8"
-
-[[package]]
-name = "textwrap"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
-dependencies = [
- "unicode-width",
-]
 
 [[package]]
 name = "textwrap"
@@ -6458,7 +6436,7 @@ dependencies = [
 [[package]]
 name = "typed-store"
 version = "0.4.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#cc3296be0dfa8c304e7b5c0ba812468b54169261"
+source = "git+https://github.com/eqlabs/bullshark-bft/#6e84df89eef18b79b19629b1bf83a941b6237b77"
 dependencies = [
  "async-trait",
  "bincode 1.3.3",
@@ -6469,7 +6447,6 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "ouroboros",
- "prometheus",
  "rand",
  "rocksdb",
  "serde",
@@ -6638,12 +6615,6 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
-
-[[package]]
-name = "vec_map"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
 name = "version_check"
