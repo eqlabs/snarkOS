@@ -14,11 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-pub const GAUGE_NAMES: [&str; 5] =
-    [blocks::HEIGHT, peers::CONNECTED, peers::CANDIDATE, peers::RESTRICTED, consensus::CERTIFICATE_COMMIT_LATENCY];
-pub const COUNTER_NAMES: [&str; 3] =
-    [consensus::LEADERS_ELECTED, consensus::LAST_COMMITTED_ROUND, consensus::COMMITTED_CERTIFICATES];
-pub const HISTOGRAM_NAMES: [&str; 1] = [network::NETWORK_PEERS];
+pub const GAUGE_NAMES: [&str; 8] = [
+    blocks::HEIGHT,
+    peers::CONNECTED,
+    peers::CANDIDATE,
+    peers::RESTRICTED,
+    consensus::CERTIFICATE_COMMIT_LATENCY,
+    consensus::COMMITTED_CERTIFICATES,
+    consensus::LAST_COMMITTED_ROUND,
+    network::NETWORK_PEERS,
+];
+pub const COUNTER_NAMES: [&str; 1] = [consensus::LEADERS_ELECTED];
+pub const HISTOGRAM_NAMES: [&str; 0] = [];
 
 pub mod blocks {
     pub const HEIGHT: &str = "snarkos_blocks_height_total";
