@@ -45,4 +45,10 @@ fn register_metrics() {
     for name in GAUGE_NAMES {
         register_gauge!(name);
     }
+    for name in COUNTER_NAMES {
+        register_counter!(name);
+    }
+    for name in HISTOGRAM_NAMES {
+        register_histogram!(name);
+    }
 }

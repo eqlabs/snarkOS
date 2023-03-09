@@ -14,7 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-pub const GAUGE_NAMES: [&str; 4] = [blocks::HEIGHT, peers::CONNECTED, peers::CANDIDATE, peers::RESTRICTED];
+pub const GAUGE_NAMES: [&str; 5] =
+    [blocks::HEIGHT, peers::CONNECTED, peers::CANDIDATE, peers::RESTRICTED, consensus::CERTIFICATE_COMMIT_LATENCY];
+pub const COUNTER_NAMES: [&str; 3] =
+    [consensus::LEADERS_ELECTED, consensus::LAST_COMMITTED_ROUND, consensus::COMMITTED_CERTIFICATES];
+pub const HISTOGRAM_NAMES: [&str; 1] = [network::NETWORK_PEERS];
 
 pub mod blocks {
     pub const HEIGHT: &str = "snarkos_blocks_height_total";
@@ -24,4 +28,20 @@ pub mod peers {
     pub const CONNECTED: &str = "snarkos_peers_connected_total";
     pub const CANDIDATE: &str = "snarkos_peers_candidate_total";
     pub const RESTRICTED: &str = "snarkos_peers_restricted_total";
+}
+
+pub mod consensus {
+    pub const COMMITTED_CERTIFICATES: &str = "snarkos_consensus_committed_certificates_total";
+    pub const CERTIFICATE_COMMIT_LATENCY: &str = "snarkos_consensus_certificate_commit_latency_secs";
+    pub const LEADERS_ELECTED: &str = "snarkos_consensus_leaders_elected_total";
+    pub const LAST_COMMITTED_ROUND: &str = "snarkos_consensus_last_committed_round";
+}
+
+pub mod network {
+    pub const NETWORK_PEERS: &str = "snarkos_network_peers_connected_total";
+    pub const NETWORK_PEER_CONNECTED: &str = "snarkos_network_peer_connected";
+
+    pub mod labels {
+        pub const PEER_ID: &str = "peer_id";
+    }
 }
