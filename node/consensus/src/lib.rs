@@ -507,11 +507,9 @@ impl<N: Network, C: ConsensusStorage<N>> Consensus<N, C> {
 
         /* Signature */
 
-        // Ensure the block is signed by an authorized beacon.
+        // Ensure the block is signed by an authorized entity.
         let signer = block.signature().to_address();
-        if !self.beacons.read().contains_key(&signer) {
-            bail!("Block {} ({}) is signed by an unauthorized beacon ({})", block.height(), block.hash(), signer);
-        }
+        // TODO: check against the committee.
 
         // Check the signature.
         if !block.signature().verify(&signer, &[*block.hash()]) {
