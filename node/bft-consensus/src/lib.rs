@@ -124,7 +124,7 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
                 self.committee.clone(),
                 self.worker_cache.clone(),
                 &self.p_store,
-                Arc::new(MyExecutionState::new(self.id, self.aleo_account, self.aleo_consensus.clone())),
+                Arc::new(BftExecutionState::new(self.id, self.aleo_account, self.aleo_consensus.clone())),
             )
             .await?;
 
@@ -147,20 +147,20 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
     }
 }
 
-pub struct MyExecutionState<N: Network, C: ConsensusStorage<N>> {
+pub struct BftExecutionState<N: Network, C: ConsensusStorage<N>> {
     id: u32,
     account: Account<N>,
     consensus: AleoConsensus<N, C>,
 }
 
-impl<N: Network, C: ConsensusStorage<N>> MyExecutionState<N, C> {
+impl<N: Network, C: ConsensusStorage<N>> BftExecutionState<N, C> {
     pub(crate) fn new(id: u32, account: Account<N>, consensus: AleoConsensus<N, C>) -> Self {
         Self { id, account, consensus }
     }
 }
 
 #[async_trait]
-impl<N: Network, C: ConsensusStorage<N>> ExecutionState for MyExecutionState<N, C> {
+impl<N: Network, C: ConsensusStorage<N>> ExecutionState for BftExecutionState<N, C> {
     /// Receive the consensus result with the ordered transactions in `ConsensusOutupt`
     async fn handle_consensus_output(&self, consensus_output: ConsensusOutput) {
         if !consensus_output.batches.is_empty() {
