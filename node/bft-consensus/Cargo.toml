@@ -12,9 +12,10 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1.36"
 serde_json = "1"
-snarkos-account = { path = "../../account" }
 snarkos-node-consensus = { path = "../consensus" }
 snarkos-node-messages = { path = "../messages" }
+snarkos-node-router = { path = "../router" }
+snarkos-node-tcp = { path = "../tcp" }
 snarkvm = { workspace = true }
 
 # below are the dependencies for BFT
