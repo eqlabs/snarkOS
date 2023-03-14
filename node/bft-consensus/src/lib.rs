@@ -65,7 +65,7 @@ pub enum BftError {
 fn base_path(dev: Option<u16>) -> PathBuf {
     // Retrieve the starting directory.
     match dev.is_some() {
-        // In development mode, the ledger is stored in the repository root directory.
+        // In development mode, the ledger is stored in the root directory of the repository.
         true => match std::env::current_dir() {
             Ok(current_dir) => current_dir,
             _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")),
