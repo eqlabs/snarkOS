@@ -81,10 +81,11 @@ fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
     // Construct the path to the ledger in storage.
     //
     // Prod: `~/.aleo/storage/bft-primary-{network}`
-    // Dev: `path/to/repo/.bft-primary-{network}-{id}`
+    // Dev: `path/to/repo/.bft-{network}/primary-{id}`
     match dev {
         Some(id) => {
-            path.push(format!(".bft-primary-{network}-{id}"));
+            path.push(format!(".bft-{network}"));
+            path.push(format!("primary-{id}"));
         }
 
         None => {
@@ -103,10 +104,11 @@ fn worker_dir(network: u16, worker_id: u32, dev: Option<u16>) -> PathBuf {
     // Construct the path to the ledger in storage.
     //
     // Prod: `~/.aleo/storage/bft-worker-{network}-{worker_id}`
-    // Dev: `path/to/repo/.bft-worker-{network}-{primary_id}-{worker_id}`
+    // Dev: `path/to/repo/.bft-{network}/worker-{primary_id}-{worker_id}`
     match dev {
         Some(primary_id) => {
-            path.push(format!(".bft-worker-{network}-{primary_id}-{worker_id}"));
+            path.push(format!(".bft-{network}"));
+            path.push(format!("worker-{primary_id}-{worker_id}"));
         }
 
         None => {
