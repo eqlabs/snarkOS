@@ -30,10 +30,11 @@ use narwhal_crypto::NetworkKeyPair;
 use narwhal_executor::ExecutionState;
 use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
 use narwhal_types::{Batch, ConsensusOutput};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tracing::*;
 
+use aleo_std::aleo_dir;
 use snarkos_node_consensus::Consensus as AleoConsensus;
 use snarkos_node_messages::{Data, Message, NewBlock};
 use snarkos_node_router::Router;
@@ -41,6 +42,7 @@ use snarkos_node_tcp::protocols::Writing;
 use snarkvm::prelude::{ConsensusStorage, Network};
 
 pub struct BftConsensus<N: Network, C: ConsensusStorage<N>> {
+    // TODO(nkls): remove this
     id: u32,
     primary_keypair: BLS12381KeyPair,
     network_keypair: NetworkKeyPair,
@@ -60,8 +62,71 @@ pub enum BftError {
     EyreReport(String),
 }
 
+fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
+    // Retrieve the starting directory.
+    let mut path = match dev.is_some() {
+        // In development mode, the ledger is stored in the repository root directory.
+        true => match std::env::current_dir() {
+            Ok(current_dir) => current_dir,
+            _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        },
+        // In production mode, the ledger is stored in the `~/.aleo/` directory.
+        false => aleo_dir(),
+    };
+
+    // Construct the path to the ledger in storage.
+    //
+    // Prod: `~/.aleo/storage/bft-primary-{network}`
+    // Dev: `path/to/repo/.bft-primary-{network}-{id}`
+    match dev {
+        Some(id) => {
+            path.push(format!(".bft-primary-{network}-{id}"));
+        }
+
+        None => {
+            path.push("storage");
+            path.push(format!("bft-primary-{network}"));
+        }
+    }
+
+    path
+}
+
+fn worker_dir(network: u16, worker_id: u32, dev: Option<u16>) -> PathBuf {
+    // Retrieve the starting directory.
+    let mut path = match dev.is_some() {
+        // In development mode, the ledger is stored in the repository root directory.
+        true => match std::env::current_dir() {
+            Ok(current_dir) => current_dir,
+            _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        },
+        // In production mode, the ledger is stored in the `~/.aleo/` directory.
+        false => aleo_dir(),
+    };
+
+    // Construct the path to the ledger in storage.
+    //
+    // Prod: `~/.aleo/storage/bft-worker-{network}-{worker_id}`
+    // Dev: `path/to/repo/.bft-primary-{network}-{primary_id}-{worker_id}`
+    match dev {
+        Some(primary_id) => {
+            path.push(format!(".bft-worker-{network}-{primary_id}-{worker_id}"));
+        }
+
+        None => {
+            path.push("storage");
+            path.push(format!("bft-worker-{network}-{worker_id}"));
+        }
+    }
+
+    path
+}
+
 impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
-    pub fn new(id: u32, aleo_consensus: AleoConsensus<N, C>, aleo_router: Router<N>) -> Result<Self> {
+    pub fn new(aleo_consensus: AleoConsensus<N, C>, aleo_router: Router<N>, dev: Option<u16>) -> Result<Self> {
+        // Offset here as the beacon is started on 0 and validators have their keys counted from 0
+        // currently.
+        let id = dev.expect("only dev mode is supported currently") - 1;
         let primary_key_file = format!("{}/.primary-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
         let primary_keypair =
             read_authority_keypair_from_file(primary_key_file).expect("Failed to load the node's primary keypair");
@@ -93,12 +158,12 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
             .map_err(|e| BftError::EyreReport(e.to_string()))?;
 
         // Make the data store.
-        let store_path = format!("{}/.db-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
-        let p_store = NodeStorage::reopen(store_path);
-        let store_path = format!("{}/.db-{id}-0-key.json", env!("CARGO_MANIFEST_DIR"));
-        let w_store = NodeStorage::reopen(store_path);
+        let p_store_path = primary_dir(N::ID, dev);
+        let p_store = NodeStorage::reopen(p_store_path);
+        let w_store_path = worker_dir(N::ID, 0, dev);
+        let w_store = NodeStorage::reopen(w_store_path);
         Ok(Self {
-            id,
+            id: id.into(),
             primary_keypair,
             network_keypair,
             worker_keypair,
