@@ -4919,6 +4919,7 @@ dependencies = [
 name = "snarkos-node-bft-consensus"
 version = "0.1.0"
 dependencies = [
+ "aleo-std",
  "anyhow",
  "arc-swap",
  "async-trait",
