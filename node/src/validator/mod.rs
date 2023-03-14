@@ -87,7 +87,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         let router = Router::new(
             node_ip,
             NodeType::Validator,
-            account.clone(),
+            account,
             trusted_peers,
             Self::MAXIMUM_NUMBER_OF_PEERS as u16,
             dev.is_some(),
@@ -98,7 +98,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         let mut node = Self {
             ledger: ledger.clone(),
             consensus: consensus.clone(),
-            router,
+            router: router.clone(),
             rest: None,
             handles: Default::default(),
             shutdown: Default::default(),
@@ -117,8 +117,8 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
 
         // Start the BFT consensus here
         // TODO: this port trick only works in dev mode?
-        let id = node_ip.port() - 4130 - 1; // - 1 as the beacon is on dev 0 (so 4130)
-        let bft = BftConsensus::new(id as u32, account, consensus)?;
+        let id = dev.unwrap() - 1;
+        let bft = BftConsensus::new(id as u32, consensus, router)?;
         let (primary, worker) = bft.start().await.unwrap();
 
         // Start the primary.
@@ -145,6 +145,16 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
     /// Returns the REST server.
     pub fn rest(&self) -> &Option<Arc<Rest<N, C, Self>>> {
         &self.rest
+    }
+
+    #[cfg(feature = "test")]
+    pub fn consensus(&self) -> &Consensus<N, C> {
+        &self.consensus
+    }
+
+    #[cfg(feature = "test")]
+    pub fn router(&self) -> &Router<N> {
+        &self.router
     }
 }
 

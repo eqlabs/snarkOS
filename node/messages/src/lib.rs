@@ -46,6 +46,9 @@ pub use challenge_response::ChallengeResponse;
 mod disconnect;
 pub use disconnect::Disconnect;
 
+mod new_block;
+pub use new_block::NewBlock;
+
 mod peer_request;
 pub use peer_request::PeerRequest;
 
@@ -124,11 +127,12 @@ pub enum Message<N: Network> {
     PuzzleResponse(PuzzleResponse<N>),
     UnconfirmedSolution(UnconfirmedSolution<N>),
     UnconfirmedTransaction(UnconfirmedTransaction<N>),
+    NewBlock(NewBlock<N>),
 }
 
 impl<N: Network> Message<N> {
     /// The version of the network protocol; it can be incremented in order to force users to update.
-    pub const VERSION: u32 = 5;
+    pub const VERSION: u32 = 6;
 
     /// Returns the message name.
     #[inline]
@@ -150,6 +154,7 @@ impl<N: Network> Message<N> {
             Self::PuzzleResponse(message) => message.name(),
             Self::UnconfirmedSolution(message) => message.name(),
             Self::UnconfirmedTransaction(message) => message.name(),
+            Self::NewBlock(message) => message.name(),
         }
     }
 
@@ -173,6 +178,7 @@ impl<N: Network> Message<N> {
             Self::PuzzleResponse(..) => 13,
             Self::UnconfirmedSolution(..) => 14,
             Self::UnconfirmedTransaction(..) => 15,
+            Self::NewBlock(..) => 16,
         }
     }
 
@@ -198,6 +204,7 @@ impl<N: Network> Message<N> {
             Self::PuzzleResponse(message) => message.serialize(writer),
             Self::UnconfirmedSolution(message) => message.serialize(writer),
             Self::UnconfirmedTransaction(message) => message.serialize(writer),
+            Self::NewBlock(message) => message.serialize(writer),
         }
     }
 
@@ -230,6 +237,7 @@ impl<N: Network> Message<N> {
             13 => Self::PuzzleResponse(MessageTrait::deserialize(bytes)?),
             14 => Self::UnconfirmedSolution(MessageTrait::deserialize(bytes)?),
             15 => Self::UnconfirmedTransaction(MessageTrait::deserialize(bytes)?),
+            16 => Self::NewBlock(MessageTrait::deserialize(bytes)?),
             _ => bail!("Unknown message ID {id}"),
         };
 

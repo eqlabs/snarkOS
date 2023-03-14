@@ -18,6 +18,7 @@ edition = "2021"
 
 [features]
 default = [ ]
+test = []
 timer = [ "aleo-std/timer", "snarkos-node-ledger/timer" ]
 
 [dependencies] # added for BFT
