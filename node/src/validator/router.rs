@@ -24,6 +24,7 @@ use snarkos_node_messages::{
     DisconnectReason,
     Message,
     MessageCodec,
+    NewBlock,
     Ping,
     Pong,
     UnconfirmedTransaction,
@@ -165,6 +166,23 @@ impl<N: Network, C: ConsensusStorage<N>> Inbound<N> for Validator<N, C> {
 
         // Tries to advance with blocks from the sync pool.
         self.advance_with_sync_blocks();
+        true
+    }
+
+    /// Handles a `NewBlock` message.
+    fn new_block(&self, peer_ip: SocketAddr, block: Block<N>, serialized: NewBlock<N>) -> bool {
+        // A failed check doesn't necessarily mean the block is malformed, so return true here.
+        if self.consensus.check_next_block(&block).is_err() {
+            return true;
+        }
+        if let Err(err) = self.consensus.advance_to_next_block(&block) {
+            error!("[NewBlock] {err}");
+            return false;
+        }
+
+        // TODO: perform more elaborate propagation
+        self.propagate(Message::NewBlock(serialized), vec![peer_ip]);
+
         true
     }
 
