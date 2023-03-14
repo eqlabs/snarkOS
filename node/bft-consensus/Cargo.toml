@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aleo-std = "0.1.15"
 async-trait = "0.1"
 bincode = "1"
 bytes = "1"
