@@ -103,7 +103,7 @@ fn worker_dir(network: u16, worker_id: u32, dev: Option<u16>) -> PathBuf {
     // Construct the path to the ledger in storage.
     //
     // Prod: `~/.aleo/storage/bft-worker-{network}-{worker_id}`
-    // Dev: `path/to/repo/.bft-primary-{network}-{primary_id}-{worker_id}`
+    // Dev: `path/to/repo/.bft-worker-{network}-{primary_id}-{worker_id}`
     match dev {
         Some(primary_id) => {
             path.push(format!(".bft-worker-{network}-{primary_id}-{worker_id}"));
