@@ -62,9 +62,9 @@ pub enum BftError {
     EyreReport(String),
 }
 
-fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
+fn base_path(dev: Option<u16>) -> PathBuf {
     // Retrieve the starting directory.
-    let mut path = match dev.is_some() {
+    match dev.is_some() {
         // In development mode, the ledger is stored in the repository root directory.
         true => match std::env::current_dir() {
             Ok(current_dir) => current_dir,
@@ -72,7 +72,11 @@ fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
         },
         // In production mode, the ledger is stored in the `~/.aleo/` directory.
         false => aleo_dir(),
-    };
+    }
+}
+
+fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
+    let mut path = base_path(dev);
 
     // Construct the path to the ledger in storage.
     //
@@ -94,15 +98,7 @@ fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
 
 fn worker_dir(network: u16, worker_id: u32, dev: Option<u16>) -> PathBuf {
     // Retrieve the starting directory.
-    let mut path = match dev.is_some() {
-        // In development mode, the ledger is stored in the repository root directory.
-        true => match std::env::current_dir() {
-            Ok(current_dir) => current_dir,
-            _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")),
-        },
-        // In production mode, the ledger is stored in the `~/.aleo/` directory.
-        false => aleo_dir(),
-    };
+    let mut path = base_path(dev);
 
     // Construct the path to the ledger in storage.
     //
