@@ -25,7 +25,7 @@ use snarkos_node_messages::{
     MessageCodec,
     MessageTrait,
 };
-use snarkos_node_tcp::{ConnectionSide, Tcp, P2P};
+use snarkos_node_tcp::ConnectionSide;
 use snarkvm::prelude::{error, Address, Header, Network};
 
 use anyhow::{bail, Result};
@@ -35,13 +35,6 @@ use std::{io, net::SocketAddr};
 use tokio::net::TcpStream;
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
-
-impl<N: Network> P2P for Router<N> {
-    /// Returns a reference to the TCP instance.
-    fn tcp(&self) -> &Tcp {
-        &self.tcp
-    }
-}
 
 impl<N: Network> Router<N> {
     /// Performs the handshake protocol.
