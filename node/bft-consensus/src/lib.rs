@@ -91,7 +91,7 @@ fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
         None => {
             path.push("storage");
             path.push(format!("bft-{network}"));
-            path.push(format!("primary"));
+            path.push("primary");
         }
     }
 
