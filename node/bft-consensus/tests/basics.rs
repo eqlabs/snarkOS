@@ -19,30 +19,37 @@ use tracing_subscriber::filter::LevelFilter;
 
 mod common;
 
-use common::{start_logger, CommitteeSetup, PrimarySetup, TestBftConsensus};
+use common::{start_logger, CommitteeSetup, PrimarySetup};
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn foo() {
+    // Start the logger.
     start_logger(LevelFilter::DEBUG);
 
+    // Prepare a source of randomness.
     let mut rng = thread_rng();
 
-    let primaries = vec![
-        PrimarySetup::new(1, &mut rng),
-        PrimarySetup::new(1, &mut rng),
-        PrimarySetup::new(1, &mut rng),
-        PrimarySetup::new(1, &mut rng),
-    ];
+    // Configure the primary-related variables.
+    const NUM_PRIMARIES: usize = 4;
+    const WORKERS_PER_PRIMARY: u32 = 1;
+    const PRIMARY_STAKE: u64 = 1;
+
+    // Generate the committee setup.
+    let mut primaries = Vec::with_capacity(NUM_PRIMARIES);
+    for _ in 0..NUM_PRIMARIES {
+        let primary = PrimarySetup::new(PRIMARY_STAKE, WORKERS_PER_PRIMARY, &mut rng);
+        primaries.push(primary);
+    }
     let mut committee = CommitteeSetup::new(primaries, 0);
 
+    // Create and start the preconfigured consensus instances.
     let inert_consensus_instances = committee.generate_consensus_instances();
-    let mut running_consensus_instances = Vec::with_capacity(4); // TODO: make adjustable
+    let mut running_consensus_instances = Vec::with_capacity(NUM_PRIMARIES);
     for instance in inert_consensus_instances {
         let running_instance = instance.start().await.unwrap();
         running_consensus_instances.push(running_instance);
     }
 
+    // TODO: extend to something useful and rename the test
     std::future::pending().await
-
-    // TODO: extend to something useful and rename
 }

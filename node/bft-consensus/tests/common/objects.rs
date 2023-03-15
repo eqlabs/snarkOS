@@ -25,31 +25,29 @@ use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStora
 
 use super::{state::TestBftExecutionState, validation::TestTransactionValidator};
 
-pub struct TestBftConsensus {
-    pub primary_id: u8,
+pub struct InertConsensusInstance {
     pub primary_keypair: BLS12381KeyPair,
     pub network_keypair: NetworkKeyPair,
-    pub worker_keypair: NetworkKeyPair,
+    pub worker_keypairs: Vec<NetworkKeyPair>,
     pub parameters: Parameters,
     pub primary_store: NodeStorage,
-    pub worker_store: NodeStorage,
+    pub worker_stores: Vec<NodeStorage>,
     pub committee: Arc<ArcSwap<Committee>>,
     pub worker_cache: Arc<ArcSwap<WorkerCache>>,
 }
 
 #[allow(dead_code)]
 pub struct RunningConsensusInstance {
-    primary_id: u8,
     primary_node: PrimaryNode,
-    worker_node: WorkerNode,
+    worker_nodes: Vec<WorkerNode>,
 }
 
-impl TestBftConsensus {
+impl InertConsensusInstance {
     pub async fn start(self) -> Result<RunningConsensusInstance> {
         let primary_pub = self.primary_keypair.public().clone();
         let primary = PrimaryNode::new(self.parameters.clone(), true);
-        let bft_execution_state = TestBftExecutionState::default();
 
+        // Start the primary.
         primary
             .start(
                 self.primary_keypair,
@@ -57,24 +55,30 @@ impl TestBftConsensus {
                 self.committee.clone(),
                 self.worker_cache.clone(),
                 &self.primary_store,
-                Arc::new(bft_execution_state),
+                Arc::new(TestBftExecutionState::default()),
             )
             .await?;
 
-        let worker = WorkerNode::new(0, self.parameters.clone());
-        worker
-            .start(
-                primary_pub,
-                self.worker_keypair,
-                self.committee.clone(),
-                self.worker_cache,
-                &self.worker_store,
-                TestTransactionValidator::default(),
-            )
-            .await?;
+        // Start the workers associated with the primary.
+        let num_workers = self.worker_keypairs.len();
+        let mut worker_nodes = Vec::with_capacity(num_workers);
+        for (worker_id, worker_keypair) in self.worker_keypairs.into_iter().enumerate() {
+            let worker = WorkerNode::new(worker_id as u32, self.parameters.clone());
+            worker
+                .start(
+                    primary_pub.clone(),
+                    worker_keypair,
+                    self.committee.clone(),
+                    self.worker_cache.clone(),
+                    &self.worker_stores[worker_id],
+                    TestTransactionValidator::default(),
+                )
+                .await?;
 
-        let instance =
-            RunningConsensusInstance { primary_id: self.primary_id, primary_node: primary, worker_node: worker };
+            worker_nodes.push(worker);
+        }
+
+        let instance = RunningConsensusInstance { primary_node: primary, worker_nodes };
 
         Ok(instance)
     }
