@@ -4942,10 +4942,12 @@ dependencies = [
  "snarkos-node-router",
  "snarkos-node-tcp",
  "snarkvm",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber 0.3.16",
 ]
 
 [[package]]
