@@ -39,6 +39,14 @@ members = [
 name = "snarkos"
 path = "snarkos/main.rs"
 
+[workspace.dependencies]
+narwhal-types       = { git = "https://github.com/eqlabs/bullshark-bft/", branch = "feat/metrics", package = "narwhal-types" }
+narwhal-config      = { git = "https://github.com/eqlabs/bullshark-bft/", branch = "feat/metrics", package = "narwhal-config" }
+narwhal-crypto      = { git = "https://github.com/eqlabs/bullshark-bft/", branch = "feat/metrics", package = "narwhal-crypto" }
+narwhal-executor    = { git = "https://github.com/eqlabs/bullshark-bft/", branch = "feat/metrics", package = "narwhal-executor" }
+narwhal-node        = { git = "https://github.com/eqlabs/bullshark-bft/", branch = "feat/metrics", package = "narwhal-node"}
+narwhal-worker      = { git = "https://github.com/eqlabs/bullshark-bft/", branch = "feat/metrics", package = "narwhal-worker"}
+
 [workspace.dependencies.snarkvm]
 #path = "../snarkVM"
 #git = "https://github.com/AleoHQ/snarkVM.git"
@@ -112,6 +120,7 @@ debug-assertions = false
 opt-level = 2
 lto = "thin"
 incremental = true
+split-debuginfo = "unpacked"
 
 [profile.test]
 opt-level = 2
