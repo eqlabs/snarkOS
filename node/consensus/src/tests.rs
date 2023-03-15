@@ -563,6 +563,7 @@ async fn test_bullshark_full() {
             genesis.clone(), // use a common genesis block
             None,
             Some(i as u16),
+            false,
         )
         .await
         .unwrap();
