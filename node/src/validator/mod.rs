@@ -116,9 +116,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         node.handle_signals();
 
         // Start the BFT consensus here
-        // TODO: this port trick only works in dev mode?
-        let id = dev.unwrap() - 1;
-        let bft = BftConsensus::new(id as u32, consensus, router)?;
+        let bft = BftConsensus::new(consensus, router, dev)?;
         let (primary, worker) = bft.start().await.unwrap();
 
         // Start the primary.
