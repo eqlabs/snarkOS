@@ -24,25 +24,35 @@ use narwhal_crypto::NetworkKeyPair;
 use narwhal_node::NodeStorage;
 use rand::prelude::ThreadRng;
 use tempfile::TempDir;
+use tracing::*;
 
-use crate::TestBftConsensus;
+use crate::common::InertConsensusInstance;
 
 pub struct PrimarySetup {
     stake: u64,
     address: Multiaddr,
     keypair: BLS12381KeyPair,
     network_keypair: NetworkKeyPair,
-    worker: WorkerSetup, // TODO: extend to multiple workers
+    workers: Vec<WorkerSetup>,
 }
 
 impl PrimarySetup {
-    pub fn new(stake: u64, rng: &mut ThreadRng) -> Self {
+    pub fn new(stake: u64, num_workers: u32, rng: &mut ThreadRng) -> Self {
+        if num_workers > 1 {
+            panic!(
+                "Running multiple workers on a single machine is currently unsupported;\
+                    the bullshark-bft crate would need to be adjusted for that feature."
+            );
+        }
+
+        let workers = (0..num_workers).map(|_| WorkerSetup::new(rng)).collect();
+
         Self {
             stake,
             address: "/ip4/127.0.0.1/udp/0".parse().unwrap(),
             keypair: BLS12381KeyPair::generate(rng),
             network_keypair: NetworkKeyPair::generate(rng),
-            worker: WorkerSetup::new(rng),
+            workers,
         }
     }
 }
@@ -74,7 +84,7 @@ impl CommitteeSetup {
         Self { primaries, epoch, storage_dir: TempDir::new().unwrap() }
     }
 
-    pub fn generate_consensus_instances(&mut self) -> Vec<TestBftConsensus> {
+    pub fn generate_consensus_instances(&mut self) -> Vec<InertConsensusInstance> {
         // Generate the Parameters.
         // TODO: tweak them further for test purposes?
         let mut parameters = Parameters::default();
@@ -82,6 +92,8 @@ impl CommitteeSetup {
         // These tweaks are necessary in order to avoid "address already in use" errors.
         parameters.network_admin_server.primary_network_admin_server_port = 0;
         parameters.network_admin_server.worker_network_admin_server_base_port = 0;
+
+        debug!("Using the following consensus parameters: {:#?}", parameters);
 
         // Generate the Committee.
         let mut authorities = BTreeMap::default();
@@ -98,18 +110,18 @@ impl CommitteeSetup {
 
         // Generate the WorkerCache.
         let mut workers = BTreeMap::default();
-        // TODO: extend to multiple workers
         for primary in &self.primaries {
-            let worker_info = WorkerInfo {
-                name: primary.worker.network_keypair.public().clone(),
-                transactions: primary.worker.tx_address.clone(),
-                worker_address: primary.worker.address.clone(),
-            };
-
             let mut worker_index = BTreeMap::default();
-            worker_index.insert(0, worker_info);
-            let worker_index = WorkerIndex(worker_index);
+            for (worker_id, worker) in primary.workers.iter().enumerate() {
+                let worker_info = WorkerInfo {
+                    name: worker.network_keypair.public().clone(),
+                    transactions: worker.tx_address.clone(),
+                    worker_address: worker.address.clone(),
+                };
 
+                worker_index.insert(worker_id as u32, worker_info);
+            }
+            let worker_index = WorkerIndex(worker_index);
             workers.insert(primary.keypair.public().clone(), worker_index);
         }
         let worker_cache = Arc::new(ArcSwap::from_pointee(WorkerCache { epoch: self.epoch, workers }));
@@ -117,26 +129,31 @@ impl CommitteeSetup {
         // Create the consensus objects.
         let mut consensus_objects = Vec::with_capacity(self.primaries.len());
         for (primary_id, primary) in self.primaries.drain(..).enumerate() {
-            // Prepare the storage.
+            // Prepare the temporary folder for storage.
             let base_path = self.storage_dir.path();
 
+            // Create the primary storage instance.
             let mut primary_store_path = base_path.to_owned();
             primary_store_path.push(format!("primary-{primary_id}"));
             let primary_store = NodeStorage::reopen(primary_store_path);
 
-            let worker_id = 0; // TODO: extend to multiple workers
-            let mut worker_store_path = base_path.to_owned();
-            worker_store_path.push(format!("worker-{primary_id}-{worker_id}"));
-            let worker_store = NodeStorage::reopen(worker_store_path);
+            // Create the worker storage instance(s).
+            let mut worker_stores = Vec::with_capacity(primary.workers.len());
+            for worker_id in 0..primary.workers.len() {
+                let mut worker_store_path = base_path.to_owned();
+                worker_store_path.push(format!("worker-{primary_id}-{worker_id}"));
+                let worker_store = NodeStorage::reopen(worker_store_path);
+                worker_stores.push(worker_store);
+            }
 
-            let consensus = TestBftConsensus {
-                primary_id: primary_id as u8,
+            // Create the full consensus instance.
+            let consensus = InertConsensusInstance {
                 primary_keypair: primary.keypair,
                 network_keypair: primary.network_keypair,
-                worker_keypair: primary.worker.network_keypair,
+                worker_keypairs: primary.workers.into_iter().map(|w| w.network_keypair).collect(),
                 parameters: parameters.clone(),
                 primary_store,
-                worker_store,
+                worker_stores,
                 committee: Arc::clone(&committee),
                 worker_cache: Arc::clone(&worker_cache),
             };
