@@ -91,7 +91,7 @@ fn primary_dir(network: u16, dev: Option<u16>) -> PathBuf {
         None => {
             path.push("storage");
             path.push(format!("bft-{network}"));
-            path.push(format!("primary"));
+            path.push("primary");
         }
     }
 
@@ -374,13 +374,13 @@ impl<N: Network, C: ConsensusStorage<N>> ExecutionState for BftExecutionState<N,
     }
 }
 
-fn read_network_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Ed25519KeyPair> {
+pub fn read_network_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Ed25519KeyPair> {
     let contents = std::fs::read_to_string(path)?;
     let bytes = Base64::decode(contents.as_str()).map_err(|e| anyhow!("{}", e.to_string()))?;
     Ed25519KeyPair::from_bytes(bytes.get(1..).unwrap()).map_err(|e| anyhow!(e))
 }
 
-fn read_authority_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<BLS12381KeyPair> {
+pub fn read_authority_keypair_from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<BLS12381KeyPair> {
     let contents = std::fs::read_to_string(path)?;
     BLS12381KeyPair::decode_base64(contents.as_str().trim()).map_err(|e| anyhow!(e))
 }
