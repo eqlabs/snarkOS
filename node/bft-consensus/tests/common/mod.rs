@@ -15,11 +15,13 @@
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
 mod objects;
+mod setup;
 mod state;
 mod transaction;
 mod validation;
 
 pub use objects::*;
+pub use setup::*;
 pub use state::*;
 pub use transaction::*;
 pub use validation::*;
@@ -31,12 +33,14 @@ pub fn start_logger(default_level: LevelFilter) {
         Ok(filter) => filter
             .add_directive("anemo=off".parse().unwrap())
             .add_directive("rustls=off".parse().unwrap())
-            .add_directive("tokio_util=off".parse().unwrap()),
+            .add_directive("tokio_util=off".parse().unwrap())
+            .add_directive("typed_store=off".parse().unwrap()),
         _ => EnvFilter::default()
             .add_directive(default_level.into())
             .add_directive("anemo=off".parse().unwrap())
             .add_directive("rustls=off".parse().unwrap())
-            .add_directive("tokio_util=off".parse().unwrap()),
+            .add_directive("tokio_util=off".parse().unwrap())
+            .add_directive("typed_store=off".parse().unwrap()),
     };
 
     tracing_subscriber::fmt().with_env_filter(filter).with_target(true).init();
