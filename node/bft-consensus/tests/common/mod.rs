@@ -32,12 +32,14 @@ pub fn start_logger(default_level: LevelFilter) {
     let filter = match EnvFilter::try_from_default_env() {
         Ok(filter) => filter
             .add_directive("anemo=off".parse().unwrap())
+            .add_directive("narwhal_config=off".parse().unwrap())
             .add_directive("rustls=off".parse().unwrap())
             .add_directive("tokio_util=off".parse().unwrap())
             .add_directive("typed_store=off".parse().unwrap()),
         _ => EnvFilter::default()
             .add_directive(default_level.into())
             .add_directive("anemo=off".parse().unwrap())
+            .add_directive("narwhal_config=off".parse().unwrap())
             .add_directive("rustls=off".parse().unwrap())
             .add_directive("tokio_util=off".parse().unwrap())
             .add_directive("typed_store=off".parse().unwrap()),
