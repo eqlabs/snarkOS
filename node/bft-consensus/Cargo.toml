@@ -35,5 +35,6 @@ anyhow = "1"
 thiserror = "1.0.38"
 
 [dev-dependencies]
+multiaddr = "0.17"
 tempfile = "3"
 tracing-subscriber = "0.3"
