@@ -14,24 +14,35 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
+use rand::thread_rng;
 use tracing_subscriber::filter::LevelFilter;
 
 mod common;
 
-use common::{start_logger, TestBftConsensus};
+use common::{start_logger, CommitteeSetup, PrimarySetup, TestBftConsensus};
 
 #[tokio::test]
 async fn foo() {
     start_logger(LevelFilter::DEBUG);
 
-    const N_MEMBERS: u8 = 4;
+    let mut rng = thread_rng();
 
-    let mut members = Vec::with_capacity(N_MEMBERS as usize);
-    for i in 0..N_MEMBERS {
-        let consensus = TestBftConsensus::new(i).unwrap();
-        let member = consensus.start().await.unwrap();
-        members.push(member);
+    let primaries = vec![
+        PrimarySetup::new(1, &mut rng),
+        PrimarySetup::new(1, &mut rng),
+        PrimarySetup::new(1, &mut rng),
+        PrimarySetup::new(1, &mut rng),
+    ];
+    let mut committee = CommitteeSetup::new(primaries, 0);
+
+    let inert_consensus_instances = committee.generate_consensus_instances();
+    let mut running_consensus_instances = Vec::with_capacity(4); // TODO: make adjustable
+    for instance in inert_consensus_instances {
+        let running_instance = instance.start().await.unwrap();
+        running_consensus_instances.push(running_instance);
     }
+
+    std::future::pending().await
 
     // TODO: extend to something useful and rename
 }
