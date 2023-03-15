@@ -33,3 +33,7 @@ arc-swap = "1.5.1"
 eyre = "0.6.8"
 anyhow = "1"
 thiserror = "1.0.38"
+
+[dev-dependencies]
+tempfile = "3"
+tracing-subscriber = "0.3"
