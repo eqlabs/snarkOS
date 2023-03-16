@@ -262,7 +262,7 @@ impl Start {
         // If the display is not enabled, render the welcome message.
         if self.nodisplay {
             // Print the Aleo address.
-            println!("🪪 Your Aleo address is {}.\n", account.address().to_string().bold());
+            println!("🪪  Your Aleo address is {}.\n", account.address().to_string().bold());
             // Print the node type and network.
             println!(
                 "🧭 Starting {} on {} at {}.\n",
@@ -274,11 +274,11 @@ impl Start {
             // If the node is running a REST server, print the REST IP and JWT.
             if node_type.is_beacon() || node_type.is_validator() {
                 if let Some(rest_ip) = rest_ip {
-                    println!("🌐 Starting the REST server at {}.\n", rest_ip.to_string().bold());
+                    println!("🌐Starting the REST server at {}.\n", rest_ip.to_string().bold());
 
-                    if let Ok(jwt_token) = snarkos_node_rest::Claims::new(account.address()).to_jwt_string() {
-                        println!("🔑 Your one-time JWT token is {}\n", jwt_token.dimmed());
-                    }
+                     if let Ok(jwt_token) = snarkos_node_rest::Claims::new(account.address()).to_jwt_string() {
+                         println!("🔑 Your one-time JWT token is {}\n", jwt_token.dimmed());
+                     }
                 }
             }
         }

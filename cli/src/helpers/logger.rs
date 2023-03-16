@@ -37,6 +37,7 @@ pub fn initialize_logger<P: AsRef<Path>>(verbosity: u8, nodisplay: bool, logfile
     // Filter out undesirable logs. (unfortunately EnvFilter cannot be cloned)
     let [filter, filter2] = std::array::from_fn(|_| {
         let filter = EnvFilter::from_default_env()
+            .add_directive("tower_http=debug".parse().unwrap())
             .add_directive("mio=off".parse().unwrap())
             .add_directive("tokio_util=off".parse().unwrap())
             .add_directive("hyper=off".parse().unwrap())
