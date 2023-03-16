@@ -23,7 +23,6 @@ mod helpers;
 pub use helpers::*;
 
 mod routes;
-use routes::*;
 
 use snarkos_node_consensus::Consensus;
 use snarkos_node_ledger::Ledger;
@@ -106,40 +105,40 @@ impl<N: Network, C: ConsensusStorage<N>, R: Routing<N>> Rest<N, C, R> {
             axum::Router::new()
 
             // GET ../latest/..
-            .route("/testnet3/latest/height", get(latest_height))
-            .route("/testnet3/latest/hash", get(latest_hash))
-            .route("/testnet3/latest/block", get(latest_block))
-            .route("/testnet3/latest/stateRoot", get(latest_state_root))
+            .route("/testnet3/latest/height", get(Self::latest_height))
+            .route("/testnet3/latest/hash", get(Self::latest_hash))
+            .route("/testnet3/latest/block", get(Self::latest_block))
+            .route("/testnet3/latest/stateRoot", get(Self::latest_state_root))
 
             // GET ../block/..
-            .route("/testnet3/block/:height_or_hash", get(get_block))
+            .route("/testnet3/block/:height_or_hash", get(Self::get_block))
             // The path param here is actually only the height, but the name must match the route
             // above, otherwise there'll be a conflict at runtime.
-            .route("/testnet3/block/:height_or_hash/transactions", get(get_block_transactions))
+            .route("/testnet3/block/:height_or_hash/transactions", get(Self::get_block_transactions))
 
             // GET and POST ../transaction/..
-            .route("/testnet3/transaction/:id", get(get_transaction))
-            .route("/testnet3/transaction/broadcast", post(transaction_broadcast))
+            .route("/testnet3/transaction/:id", get(Self::get_transaction))
+            .route("/testnet3/transaction/broadcast", post(Self::transaction_broadcast))
 
             // GET ../find/..
-            .route("/testnet3/find/blockHash/:tx_id", get(find_block_hash))
-            .route("/testnet3/find/transactionID/deployment/:program_id", get(find_transaction_id_from_program_id))
-            .route("/testnet3/find/transactionID/:transition_id", get(find_transaction_id_from_transition_id))
-            .route("/testnet3/find/transitionID/:input_or_output_id", get(find_transition_id))
+            .route("/testnet3/find/blockHash/:tx_id", get(Self::find_block_hash))
+            .route("/testnet3/find/transactionID/deployment/:program_id", get(Self::find_transaction_id_from_program_id))
+            .route("/testnet3/find/transactionID/:transition_id", get(Self::find_transaction_id_from_transition_id))
+            .route("/testnet3/find/transitionID/:input_or_output_id", get(Self::find_transition_id))
 
             // GET ../peers/..
-            .route("/testnet3/peers/count", get(get_peers_count))
-            .route("/testnet3/peers/all", get(get_peers_all))
-            .route("/testnet3/peers/all/metrics", get(get_peers_all_metrics))
+            .route("/testnet3/peers/count", get(Self::get_peers_count))
+            .route("/testnet3/peers/all", get(Self::get_peers_all))
+            .route("/testnet3/peers/all/metrics", get(Self::get_peers_all_metrics))
 
             // GET misc endpoints.
-            .route("/testnet3/blocks", get(get_blocks))
-            .route("/testnet3/height/:hash", get(get_height))
-            .route("/testnet3/memoryPool/transactions", get(get_memory_pool_transactions))
-            .route("/testnet3/program/:id", get(get_program))
-            .route("/testnet3/statePath/:commitment", get(get_state_path_for_commitment))
-            .route("/testnet3/beacons", get(get_beacons))
-            .route("/testnet3/node/address", get(get_node_address))
+            .route("/testnet3/blocks", get(Self::get_blocks))
+            .route("/testnet3/height/:hash", get(Self::get_height))
+            .route("/testnet3/memoryPool/transactions", get(Self::get_memory_pool_transactions))
+            .route("/testnet3/program/:id", get(Self::get_program))
+            .route("/testnet3/statePath/:commitment", get(Self::get_state_path_for_commitment))
+            .route("/testnet3/beacons", get(Self::get_beacons))
+            .route("/testnet3/node/address", get(Self::get_node_address))
 
             // Pass in `Rest` to make things convenient.
             .with_state(self.clone())
