@@ -18,7 +18,6 @@ use anyhow::{anyhow, bail, Result};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use bytes::BytesMut;
-use eyre::Context;
 use fastcrypto::{
     bls12381::min_sig::{BLS12381KeyPair, BLS12381PublicKey},
     ed25519::Ed25519KeyPair,
@@ -140,22 +139,16 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
         // Read the committee, workers and node's keypair from file.
         let committee_file = format!("{}/.committee.json", env!("CARGO_MANIFEST_DIR"));
         let committee = Arc::new(ArcSwap::from_pointee(
-            Committee::import(&committee_file)
-                .context("Failed to load the committee information")
-                .map_err(|e| BftError::EyreReport(e.to_string()))?,
+            Committee::import(&committee_file).expect("Failed to load the committee information"),
         ));
         let workers_file = format!("{}/.workers.json", env!("CARGO_MANIFEST_DIR"));
         let worker_cache = Arc::new(ArcSwap::from_pointee(
-            WorkerCache::import(&workers_file)
-                .context("Failed to load the worker information")
-                .map_err(|e| BftError::EyreReport(e.to_string()))?,
+            WorkerCache::import(&workers_file).expect("Failed to load the worker information"),
         ));
 
         // Load default parameters if none are specified.
         let filename = format!("{}/.parameters.json", env!("CARGO_MANIFEST_DIR"));
-        let parameters = Parameters::import(&filename)
-            .context("Failed to load the node's parameters")
-            .map_err(|e| BftError::EyreReport(e.to_string()))?;
+        let parameters = Parameters::import(&filename).expect("Failed to load the node's parameters");
 
         // Make the data store.
         let p_store_path = primary_dir(N::ID, dev);
