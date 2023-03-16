@@ -80,9 +80,8 @@ impl InertConsensusInstance {
     }
 }
 
-#[allow(dead_code)]
 pub struct RunningConsensusInstance {
-    primary_node: PrimaryNode,
-    worker_nodes: Vec<WorkerNode>,
+    pub primary_node: PrimaryNode,
+    pub worker_nodes: Vec<WorkerNode>,
     pub state: Arc<TestBftExecutionState>,
 }

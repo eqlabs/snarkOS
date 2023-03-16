@@ -89,3 +89,118 @@ async fn verify_state_coherence() {
         assert_eq!(first_state, state);
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn primary_failures() {
+    // Configure the primary-related variables.
+    const NUM_PRIMARIES: usize = 4;
+    const WORKERS_PER_PRIMARY: u32 = 1;
+    const PRIMARY_STAKE: u64 = 1;
+
+    // Configure the transactions.
+    const NUM_TRANSACTIONS: usize = 30;
+
+    // Prepare a source of randomness for key generation.
+    let mut rng = thread_rng();
+
+    // Generate the committee setup.
+    let mut primaries = Vec::with_capacity(NUM_PRIMARIES);
+    for _ in 0..NUM_PRIMARIES {
+        let primary = PrimarySetup::new(PRIMARY_STAKE, WORKERS_PER_PRIMARY, &mut rng);
+        primaries.push(primary);
+    }
+    let mut committee = CommitteeSetup::new(primaries, 0);
+
+    // Create transaction clients.
+    let mut tx_clients = committee.tx_clients();
+
+    // Prepare the initial state.
+    let state = TestBftExecutionState::default();
+
+    // Create and start the preconfigured consensus instances.
+    let inert_consensus_instances = committee.generate_consensus_instances(state.clone());
+    let mut running_consensus_instances = Vec::with_capacity(NUM_PRIMARIES);
+    for instance in inert_consensus_instances {
+        let running_instance = instance.start().await.unwrap();
+        running_consensus_instances.push(running_instance);
+    }
+
+    // Use a deterministic Rng for transaction generation.
+    let mut rng = TestRng::default();
+
+    // Generate random transactions.
+    let transfers = state.generate_random_transfers(NUM_TRANSACTIONS, &mut rng);
+
+    // Send a third of the transactions to the workers.
+    for transfer in &transfers[..10] {
+        let transaction: Bytes = bincode::serialize(&transfer).unwrap().into();
+        let tx = TransactionProto { transaction };
+
+        // Submit the transaction to the chosen workers.
+        for tx_client in &mut tx_clients {
+            tx_client.submit_transaction(tx.clone()).await.unwrap();
+        }
+    }
+
+    // Wait for a while to allow the transfers to be processed.
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Save the current balances.
+    let balances1 = running_consensus_instances.iter().map(|rci| rci.state.balances.lock().clone()).collect::<Vec<_>>();
+
+    // Kill one of the consensus instances and shut down the corresponding transaction client.
+    let instance_idx = rng.gen_range(0..NUM_PRIMARIES);
+    let instance = running_consensus_instances.remove(instance_idx);
+    instance.primary_node.shutdown().await;
+    drop(instance);
+    tx_clients.remove(instance_idx);
+
+    // Send another third of the transactions to the workers.
+    for transfer in &transfers[10..20] {
+        let transaction: Bytes = bincode::serialize(&transfer).unwrap().into();
+        let tx = TransactionProto { transaction };
+
+        // Submit the transaction to the chosen workers.
+        for tx_client in &mut tx_clients {
+            tx_client.submit_transaction(tx.clone()).await.unwrap();
+        }
+    }
+
+    // Wait for a while to allow the transfers to be processed.
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Save the current balances.
+    let balances2 = running_consensus_instances.iter().map(|rci| rci.state.balances.lock().clone()).collect::<Vec<_>>();
+
+    // First check: the balances should have changed, as a single missing primary shouldn't break the consensus.
+    assert_ne!(balances1[..NUM_PRIMARIES - 1], balances2);
+
+    // Kill another one of the primaries and shut down the corresponding transaction client.
+    let instance_idx = rng.gen_range(0..NUM_PRIMARIES - 1);
+    let instance = running_consensus_instances.remove(instance_idx);
+    // FIXME: this shouldn't need to happen in a separate task, but the await hangs otherwise.
+    tokio::spawn(async move {
+        instance.primary_node.shutdown().await;
+    });
+    tx_clients.remove(instance_idx);
+
+    // Send another third of the transactions to the workers.
+    for transfer in &transfers[20..] {
+        let transaction: Bytes = bincode::serialize(&transfer).unwrap().into();
+        let tx = TransactionProto { transaction };
+
+        // Submit the transaction to the chosen workers.
+        for tx_client in &mut tx_clients {
+            tx_client.submit_transaction(tx.clone()).await.unwrap();
+        }
+    }
+
+    // Wait for a while to allow the transfers to be processed.
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    // Save the current balances.
+    let balances3 = running_consensus_instances.iter().map(|rci| rci.state.balances.lock().clone()).collect::<Vec<_>>();
+
+    // Final check: the balances should NOT have changed, as another missing primary should break the consensus.
+    assert_eq!(balances2[..NUM_PRIMARIES - 2], balances3);
+}
