@@ -9,8 +9,7 @@ async-trait = "0.1"
 bincode = "1"
 bytes = "1"
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
-tokio-util = "0.7"
+tokio = { version = "1", features = ["rt"] }
 tracing = "0.1.36"
 serde_json = "1"
 snarkos-node-consensus = { path = "../consensus" }
@@ -30,11 +29,12 @@ fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "235211dc
 rand = { version = "0.8.5", features = ["small_rng"] }
 prometheus = "0.13"
 arc-swap = "1.5.1"
-eyre = "0.6.8"
 anyhow = "1"
 thiserror = "1.0.38"
 
 [dev-dependencies]
 multiaddr = "0.17"
+parking_lot = "0.12"
 tempfile = "3"
+tonic = "0.8"
 tracing-subscriber = "0.3"

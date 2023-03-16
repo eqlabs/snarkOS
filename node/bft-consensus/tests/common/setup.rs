@@ -14,19 +14,44 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{
+        atomic::{AtomicU16, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use arc_swap::ArcSwap;
 use fastcrypto::{bls12381::min_sig::BLS12381KeyPair, traits::KeyPair};
-use multiaddr::Multiaddr;
+use multiaddr::{Multiaddr, Protocol};
 use narwhal_config::{Authority, Committee, Parameters, WorkerCache, WorkerIndex, WorkerInfo};
 use narwhal_crypto::NetworkKeyPair;
 use narwhal_node::NodeStorage;
+use narwhal_types::TransactionsClient;
 use rand::prelude::ThreadRng;
 use tempfile::TempDir;
+use tonic::transport::Channel;
 use tracing::*;
 
-use crate::common::InertConsensusInstance;
+use crate::common::{InertConsensusInstance, TestBftExecutionState};
+
+// The non-registered port range for primaries (27 slots).
+const PRIMARY_FIRST_PORT: u16 = 1030;
+const PRIMARY_LAST_PORT: u16 = 1057;
+
+// The non-registered network port range for workers (27 slots).
+const WORKER_FIRST_PORT_NET: u16 = 1242;
+const WORKER_LAST_PORT_NET: u16 = 1269;
+
+// The non-registered transaction port range for workers (53 slots).
+const WORKER_FIRST_PORT_TX: u16 = 1360;
+const WORKER_LAST_PORT_TX: u16 = 1413;
+
+static PRIMARY_PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
+static WORKER_PORT_OFFSET_NET: AtomicU16 = AtomicU16::new(0);
+static WORKER_PORT_OFFSET_TX: AtomicU16 = AtomicU16::new(0);
 
 pub struct PrimarySetup {
     stake: u64,
@@ -47,9 +72,14 @@ impl PrimarySetup {
 
         let workers = (0..num_workers).map(|_| WorkerSetup::new(rng)).collect();
 
+        let primary_port = PRIMARY_FIRST_PORT + PRIMARY_PORT_OFFSET.fetch_add(1, Ordering::SeqCst);
+        if primary_port > PRIMARY_LAST_PORT {
+            warn!("Primary port is running into registered range ({primary_port}).");
+        }
+
         Self {
             stake,
-            address: "/ip4/127.0.0.1/udp/0".parse().unwrap(),
+            address: format!("/ip4/127.0.0.1/udp/{primary_port}").parse().unwrap(),
             keypair: BLS12381KeyPair::generate(rng),
             network_keypair: NetworkKeyPair::generate(rng),
             workers,
@@ -65,9 +95,19 @@ pub struct WorkerSetup {
 
 impl WorkerSetup {
     fn new(rng: &mut ThreadRng) -> Self {
+        let worker_port_net = WORKER_FIRST_PORT_NET + WORKER_PORT_OFFSET_NET.fetch_add(1, Ordering::SeqCst);
+        if worker_port_net > WORKER_LAST_PORT_NET {
+            warn!("Worker network port is running into registered range ({worker_port_net}).");
+        }
+
+        let worker_port_tx = WORKER_FIRST_PORT_TX + WORKER_PORT_OFFSET_TX.fetch_add(1, Ordering::SeqCst);
+        if worker_port_tx > WORKER_LAST_PORT_TX {
+            warn!("Worker transaction port is running into registered range ({worker_port_tx}).");
+        }
+
         Self {
-            address: "/ip4/127.0.0.1/udp/0".parse().unwrap(),
-            tx_address: "/ip4/127.0.0.1/tcp/0/http".parse().unwrap(),
+            address: format!("/ip4/127.0.0.1/udp/{worker_port_net}").parse().unwrap(),
+            tx_address: format!("/ip4/127.0.0.1/tcp/{worker_port_tx}/http").parse().unwrap(),
             network_keypair: NetworkKeyPair::generate(rng),
         }
     }
@@ -84,7 +124,27 @@ impl CommitteeSetup {
         Self { primaries, epoch, storage_dir: TempDir::new().unwrap() }
     }
 
-    pub fn generate_consensus_instances(&mut self) -> Vec<InertConsensusInstance> {
+    pub fn tx_clients(&self) -> Vec<TransactionsClient<Channel>> {
+        let mut clients = Vec::with_capacity(self.primaries.iter().map(|p| p.workers.len()).sum());
+        for primary in &self.primaries {
+            for worker in &primary.workers {
+                let tx_port = if let Protocol::Tcp(port) =
+                    worker.tx_address.into_iter().find(|protocol| matches!(protocol, Protocol::Tcp(_))).unwrap()
+                {
+                    port
+                } else {
+                    unreachable!()
+                };
+                let tx_addr = format!("http://127.0.0.1:{tx_port}").into_bytes();
+                let channel = Channel::from_shared(tx_addr).unwrap().connect_lazy();
+                let client = TransactionsClient::new(channel);
+                clients.push(client);
+            }
+        }
+        clients
+    }
+
+    pub fn generate_consensus_instances(&mut self, state: TestBftExecutionState) -> Vec<InertConsensusInstance> {
         // Generate the Parameters.
         // TODO: tweak them further for test purposes?
         let mut parameters = Parameters::default();
@@ -92,6 +152,12 @@ impl CommitteeSetup {
         // These tweaks are necessary in order to avoid "address already in use" errors.
         parameters.network_admin_server.primary_network_admin_server_port = 0;
         parameters.network_admin_server.worker_network_admin_server_base_port = 0;
+
+        // Tweaks that make log inspection a bit more practical etc.
+        parameters.gc_depth = 100;
+        parameters.max_header_num_of_batches = 50;
+        parameters.min_header_delay = Duration::from_millis(500);
+        parameters.max_header_delay = Duration::from_secs(2);
 
         debug!("Using the following consensus parameters: {:#?}", parameters);
 
@@ -156,6 +222,7 @@ impl CommitteeSetup {
                 worker_stores,
                 committee: Arc::clone(&committee),
                 worker_cache: Arc::clone(&worker_cache),
+                state: state.clone(),
             };
 
             consensus_objects.push(consensus);

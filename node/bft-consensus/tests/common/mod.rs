@@ -28,6 +28,7 @@ pub use validation::*;
 
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
+#[allow(dead_code)]
 pub fn start_logger(default_level: LevelFilter) {
     let filter = match EnvFilter::try_from_default_env() {
         Ok(filter) => filter
