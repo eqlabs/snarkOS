@@ -37,14 +37,13 @@ use snarkvm::{
 use anyhow::Result;
 use axum::{
     extract::{ConnectInfo, DefaultBodyLimit, Path, Query, State},
-    http::{Method, Request, StatusCode},
+    http::{header::CONTENT_TYPE, Method, Request, StatusCode},
     middleware,
     middleware::Next,
     response::Response,
     routing::{get, post},
     Json,
 };
-use http::header::CONTENT_TYPE;
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 use tokio::task::JoinHandle;
 use tower_http::{
