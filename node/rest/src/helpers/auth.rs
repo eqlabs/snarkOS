@@ -19,11 +19,18 @@
 use snarkvm::prelude::*;
 
 use anyhow::{anyhow, Result};
+use axum::{
+    headers::authorization::{Authorization, Bearer},
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::Response,
+    RequestPartsExt,
+    TypedHeader,
+};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-// use warp::{reject, Filter, Rejection};
 
 /// The time a jwt token is valid for.
 pub const EXPIRATION: i64 = 10 * 365 * 24 * 60 * 60; // 10 years.
@@ -67,15 +74,6 @@ impl Claims {
     }
 }
 
-use axum::{
-    headers::authorization::{Authorization, Bearer},
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::Response,
-    RequestPartsExt,
-    TypedHeader,
-};
-
 pub async fn auth_middleware<B>(request: Request<B>, next: Next<B>) -> Result<Response, StatusCode>
 where
     B: Send,
@@ -104,30 +102,3 @@ where
 
     Ok(next.run(request).await)
 }
-
-//
-// /// Checks the authorization header for a valid token.
-// pub fn with_auth() -> impl Filter<Extract = ((),), Error = Rejection> + Clone {
-//     warp::header::<String>("authorization").and_then(|token: String| async move {
-//         if !token.starts_with("Bearer ") {
-//             return Err(reject::custom(RestError::Request("Invalid authorization header.".to_string())));
-//         }
-//
-//         // Decode the claims from the token.
-//         match decode::<Claims>(
-//             token.trim_start_matches("Bearer "),
-//             &DecodingKey::from_secret(jwt_secret()),
-//             &Validation::new(Algorithm::HS256),
-//         ) {
-//             Ok(decoded) => {
-//                 let claims = decoded.claims;
-//                 if claims.is_expired() {
-//                     return Err(reject::custom(RestError::Request("Expired JSON Web Token.".to_string())));
-//                 }
-//
-//                 Ok(())
-//             }
-//             Err(_) => Err(reject::custom(RestError::Request("Unauthorized caller.".to_string()))),
-//         }
-//     })
-// }

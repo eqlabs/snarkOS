@@ -419,6 +419,7 @@ dependencies = [
  "bitflags",
  "bytes",
  "futures-util",
+ "headers",
  "http",
  "http-body",
  "hyper",
@@ -5042,6 +5043,7 @@ name = "snarkos-node-rest"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "axum",
  "http",
  "indexmap",
  "jsonwebtoken",
@@ -5055,6 +5057,7 @@ dependencies = [
  "snarkvm",
  "time",
  "tokio",
+ "tower-http 0.4.0",
  "tracing",
  "warp",
 ]
@@ -6220,6 +6223,7 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
