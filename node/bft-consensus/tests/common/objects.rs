@@ -23,7 +23,7 @@ use narwhal_config::{Committee, Parameters, WorkerCache};
 use narwhal_crypto::NetworkKeyPair;
 use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
 
-use super::{state::TestBftExecutionState, validation::TestTransactionValidator};
+use super::{TestBftExecutionState, TestTransactionValidator};
 
 pub struct InertConsensusInstance {
     pub primary_keypair: BLS12381KeyPair,
@@ -34,28 +34,24 @@ pub struct InertConsensusInstance {
     pub worker_stores: Vec<NodeStorage>,
     pub committee: Arc<ArcSwap<Committee>>,
     pub worker_cache: Arc<ArcSwap<WorkerCache>>,
-}
-
-#[allow(dead_code)]
-pub struct RunningConsensusInstance {
-    primary_node: PrimaryNode,
-    worker_nodes: Vec<WorkerNode>,
+    pub state: TestBftExecutionState,
 }
 
 impl InertConsensusInstance {
     pub async fn start(self) -> Result<RunningConsensusInstance> {
         let primary_pub = self.primary_keypair.public().clone();
-        let primary = PrimaryNode::new(self.parameters.clone(), true);
+        let primary_node = PrimaryNode::new(self.parameters.clone(), true);
+        let state = Arc::new(self.state);
 
         // Start the primary.
-        primary
+        primary_node
             .start(
                 self.primary_keypair,
                 self.network_keypair,
                 self.committee.clone(),
                 self.worker_cache.clone(),
                 &self.primary_store,
-                Arc::new(TestBftExecutionState::default()),
+                Arc::clone(&state),
             )
             .await?;
 
@@ -78,8 +74,15 @@ impl InertConsensusInstance {
             worker_nodes.push(worker);
         }
 
-        let instance = RunningConsensusInstance { primary_node: primary, worker_nodes };
+        let instance = RunningConsensusInstance { primary_node, worker_nodes, state };
 
         Ok(instance)
     }
+}
+
+#[allow(dead_code)]
+pub struct RunningConsensusInstance {
+    primary_node: PrimaryNode,
+    worker_nodes: Vec<WorkerNode>,
+    pub state: Arc<TestBftExecutionState>,
 }

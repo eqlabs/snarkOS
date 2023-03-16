@@ -14,6 +14,20 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-// TODO: come up with some useful tx types for consensus property testing
-#[allow(dead_code)]
-enum Transaction {}
+use serde::{Deserialize, Serialize};
+
+use super::state::{Address, Amount};
+
+pub const MAX_TRANSFER_AMOUNT: u64 = 10_000;
+
+#[derive(Serialize, Deserialize)]
+pub enum Transaction {
+    Transfer(Transfer),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Transfer {
+    pub from: Address,
+    pub to: Address,
+    pub amount: Amount,
+}
