@@ -4974,7 +4974,6 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "axum",
- "http",
  "indexmap",
  "jsonwebtoken",
  "once_cell",
