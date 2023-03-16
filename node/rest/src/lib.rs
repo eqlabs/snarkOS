@@ -37,9 +37,11 @@ use snarkvm::{
 
 use anyhow::Result;
 use axum::{
-    extract::{DefaultBodyLimit, Path, Query, State},
-    http::Method,
+    extract::{ConnectInfo, DefaultBodyLimit, Path, Query, State},
+    http::{Method, Request, StatusCode},
     middleware,
+    middleware::Next,
+    response::Response,
     routing::{get, post},
     Json,
 };
@@ -143,16 +145,34 @@ impl<N: Network, C: ConsensusStorage<N>, R: Routing<N>> Rest<N, C, R> {
             .with_state(self.clone())
             // Enable tower-http tracing.
             .layer(TraceLayer::new_for_http())
+            // Custom logging.
+            .layer(middleware::from_fn(log_middleware))
             // Enable CORS.
             .layer(cors)
-            // Cap body size at 10MB
+            // Cap body size at 10MB.
             .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
             // JWT auth.
             .layer(middleware::from_fn(auth_middleware))
         };
 
         self.handles.push(Arc::new(tokio::spawn(async move {
-            axum::Server::bind(&rest_ip).serve(router.into_make_service()).await.expect("couldn't start rest server");
+            axum::Server::bind(&rest_ip)
+                .serve(router.into_make_service_with_connect_info::<SocketAddr>())
+                .await
+                .expect("couldn't start rest server");
         })))
     }
+}
+
+async fn log_middleware<B>(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    request: Request<B>,
+    next: Next<B>,
+) -> Result<Response, StatusCode>
+where
+    B: Send,
+{
+    info!("Received '{} {}' from '{addr}'", request.method(), request.uri());
+
+    Ok(next.run(request).await)
 }
