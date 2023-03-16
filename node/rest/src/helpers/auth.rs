@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-// use crate::RestError;
-//
 use snarkvm::prelude::*;
 
 use anyhow::{anyhow, Result};
@@ -78,10 +76,8 @@ pub async fn auth_middleware<B>(request: Request<B>, next: Next<B>) -> Result<Re
 where
     B: Send,
 {
-    // running extractors requires a `axum::http::request::Parts`
+    // Deconstruct the request to extract the auth token.
     let (mut parts, body) = request.into_parts();
-
-    // `TypedHeader<Authorization<Bearer>>` extracts the auth token
     let auth: TypedHeader<Authorization<Bearer>> = parts.extract().await.map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     match decode::<Claims>(auth.token(), &DecodingKey::from_secret(jwt_secret()), &Validation::new(Algorithm::HS256)) {
@@ -97,7 +93,7 @@ where
         }
     }
 
-    // reconstruct the request
+    // Reconstruct the request.
     let request = Request::from_parts(parts, body);
 
     Ok(next.run(request).await)
