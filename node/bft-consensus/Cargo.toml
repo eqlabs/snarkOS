@@ -30,7 +30,6 @@ fastcrypto = { git = "https://github.com/MystenLabs/fastcrypto", rev = "235211dc
 rand = { version = "0.8.5", features = ["small_rng"] }
 prometheus = "0.13"
 arc-swap = "1.5.1"
-eyre = "0.6.8"
 anyhow = "1"
 thiserror = "1.0.38"
 
