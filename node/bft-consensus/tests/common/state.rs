@@ -29,7 +29,7 @@ pub type Address = String;
 pub type Amount = u64;
 
 pub struct TestBftExecutionState {
-    balances: Mutex<HashMap<Address, Amount>>,
+    pub balances: Mutex<HashMap<Address, Amount>>,
 }
 
 impl Clone for TestBftExecutionState {
