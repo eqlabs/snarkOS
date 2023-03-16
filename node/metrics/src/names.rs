@@ -19,13 +19,14 @@ pub const GAUGE_NAMES: [&str; 8] = [
     peers::CONNECTED,
     peers::CANDIDATE,
     peers::RESTRICTED,
-    consensus::CERTIFICATE_COMMIT_LATENCY,
     consensus::COMMITTED_CERTIFICATES,
     consensus::LAST_COMMITTED_ROUND,
     network::NETWORK_PEERS,
+    primary::CURRENT_ROUND,
 ];
 pub const COUNTER_NAMES: [&str; 1] = [consensus::LEADERS_ELECTED];
-pub const HISTOGRAM_NAMES: [&str; 0] = [];
+pub const HISTOGRAM_NAMES: [&str; 3] =
+    [consensus::CERTIFICATE_COMMIT_LATENCY, consensus::COMMIT_ROUNDS_LATENCY, subscribers::CERTIFICATE_LATENCY];
 
 pub mod blocks {
     pub const HEIGHT: &str = "snarkos_blocks_height_total";
@@ -40,6 +41,7 @@ pub mod peers {
 pub mod consensus {
     pub const COMMITTED_CERTIFICATES: &str = "snarkos_consensus_committed_certificates_total";
     pub const CERTIFICATE_COMMIT_LATENCY: &str = "snarkos_consensus_certificate_commit_latency_secs";
+    pub const COMMIT_ROUNDS_LATENCY: &str = "snarkos_consensus_commit_rounds_latency_secs";
     pub const LEADERS_ELECTED: &str = "snarkos_consensus_leaders_elected_total";
     pub const LAST_COMMITTED_ROUND: &str = "snarkos_consensus_last_committed_round";
 }
@@ -51,4 +53,12 @@ pub mod network {
     pub mod labels {
         pub const PEER_ID: &str = "peer_id";
     }
+}
+
+pub mod subscribers {
+    pub const CERTIFICATE_LATENCY: &str = "snarkos_subscribers_certificate_latency_secs";
+}
+
+pub mod primary {
+    pub const CURRENT_ROUND: &str = "snarkos_primary_current_round";
 }

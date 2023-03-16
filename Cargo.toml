@@ -120,7 +120,6 @@ debug-assertions = false
 opt-level = 2
 lto = "thin"
 incremental = true
-split-debuginfo = "unpacked"
 
 [profile.test]
 opt-level = 2
