@@ -9,3 +9,4 @@ wasm/Cargo.lock
 beacon.log
 validator*.log
 .vscode
+.bft-*/
