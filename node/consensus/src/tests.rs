@@ -37,7 +37,7 @@ use snarkvm::{
 };
 
 use indexmap::IndexMap;
-use narwhal_types::{TransactionProto, TransactionsClient};
+use narwhal_types::TransactionProto;
 use rand::prelude::IteratorRandom;
 use tokio::sync::mpsc;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
@@ -546,7 +546,7 @@ async fn test_bullshark_full() {
     // Collect the validator addresses.
     let mut validator_addrs = vec![];
     for i in 0..N_VALIDATORS {
-        let addr: SocketAddr = format!("127.0.0.1:{}", 4131 + i).parse().unwrap();
+        let addr: SocketAddr = format!("127.0.0.1:{}", 4130 + i).parse().unwrap();
         validator_addrs.push(addr);
     }
 
@@ -564,7 +564,7 @@ async fn test_bullshark_full() {
             &other_addrs,    // the other validators are trusted peers
             genesis.clone(), // use a common genesis block
             None,
-            Some(i as u16 + 1),
+            Some(i as u16),
         )
         .await
         .unwrap();
@@ -574,6 +574,7 @@ async fn test_bullshark_full() {
     }
 
     // Wait until the validators are connected to one another.
+    // TODO: validators should do this automatically until quorum is reached
     loop {
         info!("Waiting for the validator mesh...");
 
@@ -595,14 +596,7 @@ async fn test_bullshark_full() {
     }
 
     // Prepare the setup related to the BFT workers.
-    let worker_addrs =
-        ["http://127.0.0.1:3009", "http://127.0.0.1:3011", "http://127.0.0.1:3013", "http://127.0.0.1:3015"];
-    let mut tx_clients = vec![];
-    for worker_addr in worker_addrs {
-        let channel = tonic::transport::Channel::from_static(worker_addr).connect_lazy();
-        let client = TransactionsClient::new(channel);
-        tx_clients.push(client);
-    }
+    let mut tx_clients = validators[0].bft().spawn_tx_clients();
 
     info!("Preparing a block that will allow the production of transactions.");
 

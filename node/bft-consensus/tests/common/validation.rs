@@ -16,6 +16,7 @@
 
 use narwhal_types::Batch;
 
+// A test transaction validator.
 #[derive(Default, Clone)]
 pub struct TestTransactionValidator;
 

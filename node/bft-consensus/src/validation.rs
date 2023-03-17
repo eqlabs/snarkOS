@@ -23,13 +23,14 @@ use snarkos_node_consensus::Consensus as AleoConsensus;
 use snarkos_node_messages::Message;
 use snarkvm::prelude::{ConsensusStorage, Network};
 
+// An object the BFT consensus workers can use to validate incoming transactions and their batches.
 #[derive(Clone)]
-pub(crate) struct TransactionValidator<N: Network, C: ConsensusStorage<N>>(pub AleoConsensus<N, C>);
+pub struct TransactionValidator<N: Network, C: ConsensusStorage<N>>(pub AleoConsensus<N, C>);
 
 impl<N: Network, C: ConsensusStorage<N>> narwhal_worker::TransactionValidator for TransactionValidator<N, C> {
     type Error = anyhow::Error;
 
-    /// Determines if a transaction valid for the worker to consider putting in a batch
+    /// Determines if a transaction is valid for the worker to consider putting in a batch
     fn validate(&self, transaction: &[u8]) -> Result<(), Self::Error> {
         let bytes = BytesMut::from(transaction);
         let message = Message::<N>::deserialize(bytes)?;
@@ -55,8 +56,6 @@ impl<N: Network, C: ConsensusStorage<N>> narwhal_worker::TransactionValidator fo
 
     /// Determines if this batch can be voted on
     fn validate_batch(&self, batch: &Batch) -> Result<(), Self::Error> {
-        // TODO: once the beacon is no longer the source of the transactions, batch validation
-        // might need to be disabled to avoid double validation.
         for transaction in &batch.transactions {
             self.validate(transaction)?;
         }
