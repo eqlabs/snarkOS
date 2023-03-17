@@ -5,8 +5,9 @@ storage*/
 wasm/Cargo.lock
 **/build
 **.ledger-*
+**.bft-*
 .db*
 beacon.log
 validator*.log
 .vscode
-.bft-*/
+**/committee/.dev/

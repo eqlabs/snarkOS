@@ -14,27 +14,31 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use async_trait::async_trait;
 use narwhal_executor::ExecutionState;
 use narwhal_types::ConsensusOutput;
 use parking_lot::Mutex;
 use rand::prelude::{IteratorRandom, Rng, SliceRandom};
+use tempfile::TempDir;
 use tracing::*;
 
 use super::transaction::*;
 
+// Simple transfer-related types.
 pub type Address = String;
 pub type Amount = u64;
 
+// A simple state for BFT consensus tests.
 pub struct TestBftExecutionState {
     pub balances: Mutex<HashMap<Address, Amount>>,
+    pub storage_dir: Arc<TempDir>,
 }
 
 impl Clone for TestBftExecutionState {
     fn clone(&self) -> Self {
-        Self { balances: Mutex::new(self.balances.lock().clone()) }
+        Self { balances: Mutex::new(self.balances.lock().clone()), storage_dir: Arc::clone(&self.storage_dir) }
     }
 }
 
@@ -60,7 +64,9 @@ impl Default for TestBftExecutionState {
         balances.insert("Chad".into(), 3_000_000);
         let balances = Mutex::new(balances);
 
-        Self { balances }
+        let storage_dir = Arc::new(TempDir::new().unwrap());
+
+        Self { balances, storage_dir }
     }
 }
 

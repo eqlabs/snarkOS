@@ -18,7 +18,13 @@ mod router;
 
 use crate::traits::NodeInterface;
 use snarkos_account::Account;
-use snarkos_node_bft_consensus::BftConsensus;
+use snarkos_node_bft_consensus::{
+    setup::{read_authority_keypair_from_file, workspace_dir, CommitteeSetup, PrimarySetup},
+    BftExecutionState,
+    InertConsensusInstance,
+    RunningConsensusInstance,
+    TransactionValidator,
+};
 use snarkos_node_consensus::Consensus;
 use snarkos_node_ledger::Ledger;
 use snarkos_node_messages::{BlockRequest, Message, NodeType, PuzzleResponse, UnconfirmedSolution};
@@ -31,8 +37,11 @@ use snarkos_node_tcp::{
 use snarkvm::prelude::{Block, ConsensusStorage, Header, Network, ProverSolution};
 
 use anyhow::Result;
+use fastcrypto::traits::KeyPair;
 use parking_lot::RwLock;
+use rand::thread_rng;
 use std::{
+    fs,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -57,6 +66,8 @@ pub struct Validator<N: Network, C: ConsensusStorage<N>> {
     handles: Arc<RwLock<Vec<JoinHandle<()>>>>,
     /// The shutdown signal.
     shutdown: Arc<AtomicBool>,
+    /// The running BFT consensus instance.
+    bft: Option<RunningConsensusInstance<BftExecutionState<N, C>>>,
 }
 
 impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
@@ -102,6 +113,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             rest: None,
             handles: Default::default(),
             shutdown: Default::default(),
+            bft: None,
         };
 
         // Initialize the REST server.
@@ -115,21 +127,48 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         // Initialize the signal handler.
         node.handle_signals();
 
-        // Start the BFT consensus here
-        let bft = BftConsensus::new(consensus, router, dev)?;
-        let (primary, worker) = bft.start().await.unwrap();
+        // TODO: isolate the BFT logic below to a new method that is started only once the validator mesh is ready.
 
-        // Start the primary.
-        let handle_primary = tokio::spawn(async move {
-            primary.wait().await;
-        });
-        node.handles.write().push(handle_primary);
+        // Prepare the path containing BFT consensus files.
+        let bft_path =
+            format!("{}/node/bft-consensus/committee/{}", workspace_dir(), if dev.is_some() { ".dev" } else { "" });
 
-        // Start the worker.
-        let handle_worker = tokio::spawn(async move {
-            worker.wait().await;
-        });
-        node.handles.write().push(handle_worker);
+        // In dev mode, auto-generate a permanent BFT consensus config.
+        if dev.is_some() && fs::metadata(&bft_path).is_err() {
+            // Prepare a source of randomness for key generation.
+            let mut rng = thread_rng();
+
+            // Hardcode the dev number of primaries, at least for now.
+            const NUM_PRIMARIES: usize = 4;
+
+            // Generate the committee setup.
+            let mut primaries = Vec::with_capacity(NUM_PRIMARIES);
+            for _ in 0..NUM_PRIMARIES {
+                // TODO: set up a meaningful stake
+                let primary = PrimarySetup::new(None, 1, vec![], &mut rng);
+                primaries.push(primary);
+            }
+            let committee = CommitteeSetup::new(primaries, 0);
+
+            // Create the dev subpath and write the commitee files.
+            committee.write_files(true);
+
+            // Copy the existing parameters.
+            fs::copy(format!("{bft_path}/../.parameters.json"), format!("{bft_path}/.parameters.json")).unwrap();
+        }
+
+        // Load the primary's public key.
+        let primary_id = if let Some(id) = dev { id } else { 0 };
+        let primary_key_file = format!("{bft_path}/.primary-{primary_id}-key.json");
+        let primary_pub = read_authority_keypair_from_file(primary_key_file).unwrap().public().clone();
+
+        // Start the BFT consensus instance.
+        let bft_execution_state = BftExecutionState::new(primary_pub, router, consensus.clone());
+        let bft_tx_validator = TransactionValidator(consensus);
+        let inert_bft_consensus = InertConsensusInstance::load::<N, C>(bft_execution_state, bft_tx_validator, dev)?;
+        let running_bft_consensus = inert_bft_consensus.start().await.unwrap();
+
+        node.bft = Some(running_bft_consensus);
 
         // Return the node.
         Ok(node)
@@ -143,6 +182,12 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
     /// Returns the REST server.
     pub fn rest(&self) -> &Option<Arc<Rest<N, C, Self>>> {
         &self.rest
+    }
+
+    /// Return the BFT consensus handle.
+    #[cfg(feature = "test")]
+    pub fn bft(&self) -> &RunningConsensusInstance<BftExecutionState<N, C>> {
+        self.bft.as_ref().unwrap()
     }
 
     #[cfg(feature = "test")]

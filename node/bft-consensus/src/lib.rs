@@ -14,128 +14,205 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-mod setup;
+pub mod setup;
 mod state;
 mod validation;
 
 use setup::*;
-use state::*;
-use validation::*;
+
+pub use state::BftExecutionState;
+pub use validation::TransactionValidator;
 
 use anyhow::Result;
 use arc_swap::ArcSwap;
 use fastcrypto::{bls12381::min_sig::BLS12381KeyPair, traits::KeyPair};
+use multiaddr::Protocol;
 use narwhal_config::{Committee, Import, Parameters, WorkerCache};
 use narwhal_crypto::NetworkKeyPair;
+use narwhal_executor::ExecutionState;
 use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
-use std::sync::Arc;
+use narwhal_types::TransactionsClient;
+use std::{net::IpAddr, sync::Arc};
+use tonic::transport::Channel;
 use tracing::*;
 
-use snarkos_node_consensus::Consensus as AleoConsensus;
-use snarkos_node_router::Router;
 use snarkvm::prelude::{ConsensusStorage, Network};
 
-pub struct BftConsensus<N: Network, C: ConsensusStorage<N>> {
-    // TODO(nkls): remove this
-    id: u32,
-    primary_keypair: BLS12381KeyPair,
-    network_keypair: NetworkKeyPair,
-    worker_keypair: NetworkKeyPair,
-    parameters: Parameters,
-    p_store: NodeStorage,
-    w_store: NodeStorage,
-    committee: Arc<ArcSwap<Committee>>,
-    worker_cache: Arc<ArcSwap<WorkerCache>>,
-    aleo_consensus: AleoConsensus<N, C>,
-    aleo_router: Router<N>,
+// An instance of BFT consensus that hasn't been started yet.
+pub struct InertConsensusInstance<S: ExecutionState, V: narwhal_worker::TransactionValidator> {
+    pub primary_keypair: BLS12381KeyPair,
+    pub network_keypair: NetworkKeyPair,
+    pub worker_keypairs: Vec<NetworkKeyPair>,
+    pub parameters: Parameters,
+    pub primary_store: NodeStorage,
+    pub worker_stores: Vec<NodeStorage>,
+    pub committee: Arc<ArcSwap<Committee>>,
+    pub worker_cache: Arc<ArcSwap<WorkerCache>>,
+    pub state: S,
+    pub validator: V,
 }
 
-impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
-    pub fn new(aleo_consensus: AleoConsensus<N, C>, aleo_router: Router<N>, dev: Option<u16>) -> Result<Self> {
-        // Offset here as the beacon is started on 0 and validators have their keys counted from 0
-        // currently.
-        let id = dev.expect("only dev mode is supported currently") - 1;
-        let primary_key_file = format!("{}/committee/.primary-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
+impl<S: ExecutionState + Send + Sync + 'static, V: narwhal_worker::TransactionValidator> InertConsensusInstance<S, V> {
+    // Creates a BFT consensus instance based on filesystem configuration.
+    pub fn load<N: Network, C: ConsensusStorage<N>>(state: S, validator: V, dev: Option<u16>) -> Result<Self> {
+        fn dev_subpath(dev: Option<u16>) -> &'static str {
+            if dev.is_some() { ".dev/" } else { "" }
+        }
+
+        // If we're running dev mode, potentially use a different primary ID than 0.
+        let primary_id = if let Some(dev_id) = dev { dev_id } else { 0 };
+
+        let base_path = format!("{}/node/bft-consensus/committee/{}", workspace_dir(), dev_subpath(dev));
+
+        // Load the primary's keys.
+        let primary_key_file = format!("{base_path}.primary-{primary_id}-key.json");
         let primary_keypair =
             read_authority_keypair_from_file(primary_key_file).expect("Failed to load the node's primary keypair");
-        let primary_network_key_file =
-            format!("{}/committee/.primary-{id}-network-key.json", env!("CARGO_MANIFEST_DIR"));
+        let primary_network_key_file = format!("{base_path}.primary-{primary_id}-network.json");
         let network_keypair = read_network_keypair_from_file(primary_network_key_file)
             .expect("Failed to load the node's primary network keypair");
-        let worker_key_file = format!("{}/committee/.worker-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
-        let worker_keypair =
-            read_network_keypair_from_file(worker_key_file).expect("Failed to load the node's worker keypair");
-        debug!("creating task {}", id);
-        // Read the committee, workers and node's keypair from file.
-        let committee_file = format!("{}/committee/.committee.json", env!("CARGO_MANIFEST_DIR"));
-        let committee = Arc::new(ArcSwap::from_pointee(
-            Committee::import(&committee_file).expect("Failed to load the committee information"),
-        ));
-        let workers_file = format!("{}/committee/.workers.json", env!("CARGO_MANIFEST_DIR"));
-        let worker_cache = Arc::new(ArcSwap::from_pointee(
-            WorkerCache::import(&workers_file).expect("Failed to load the worker information"),
-        ));
 
-        // Load default parameters if none are specified.
-        let filename = format!("{}/committee/.parameters.json", env!("CARGO_MANIFEST_DIR"));
-        let parameters = Parameters::import(&filename).expect("Failed to load the node's parameters");
+        // Load the workers' keys.
+        // TODO: extend to multiple workers
+        let mut worker_keypairs = vec![];
+        for worker_id in 0..1 {
+            let worker_key_file = format!("{base_path}.worker-{primary_id}-{worker_id}-network.json");
+            let worker_keypair =
+                read_network_keypair_from_file(worker_key_file).expect("Failed to load the node's worker keypair");
 
-        // Make the data store.
-        let p_store_path = primary_dir(N::ID, dev);
-        let p_store = NodeStorage::reopen(p_store_path);
-        let w_store_path = worker_dir(N::ID, 0, dev);
-        let w_store = NodeStorage::reopen(w_store_path);
+            worker_keypairs.push(worker_keypair);
+        }
+
+        // Read the shared files describing the committee, workers and parameters.
+        let committee_file = format!("{base_path}.committee.json");
+        let committee = Committee::import(&committee_file).expect("Failed to load the committee information").into();
+        let workers_file = format!("{base_path}.workers.json");
+        let worker_cache = WorkerCache::import(&workers_file).expect("Failed to load the worker information").into();
+        let parameters_file = format!("{base_path}.parameters.json");
+        let parameters = Parameters::import(&parameters_file).expect("Failed to load the node's parameters");
+
+        // Create the primary storage instance.
+        let primary_store_path = primary_storage_dir(N::ID, dev);
+        let primary_store = NodeStorage::reopen(primary_store_path);
+
+        // Create the worker storage instance(s).
+        // TODO: extend to multiple workers
+        let mut worker_stores = vec![];
+        for worker_id in 0..1 {
+            let mut worker_store_path = worker_storage_dir(N::ID, worker_id, dev);
+            worker_store_path.push(format!("worker-{worker_id}"));
+            let worker_store = NodeStorage::reopen(worker_store_path);
+            worker_stores.push(worker_store);
+        }
+
         Ok(Self {
-            id: id.into(),
             primary_keypair,
             network_keypair,
-            worker_keypair,
+            worker_keypairs,
             parameters,
-            p_store,
-            w_store,
+            primary_store,
+            worker_stores,
             committee,
             worker_cache,
-            aleo_consensus,
-            aleo_router,
+            state,
+            validator,
         })
     }
 
-    /// Start the primary and worker node
-    /// only 1 worker is spawned ATM
-    /// caller must call `wait().await` on primary and worker
-    pub async fn start(self) -> Result<(PrimaryNode, WorkerNode)> {
+    /// Start the primary and worker node(s).
+    pub async fn start(self) -> Result<RunningConsensusInstance<S>> {
         let primary_pub = self.primary_keypair.public().clone();
-        let primary = PrimaryNode::new(self.parameters.clone(), true);
-        let bft_execution_state =
-            BftExecutionState::new(primary_pub.clone(), self.aleo_router.clone(), self.aleo_consensus.clone());
+        let primary_node = PrimaryNode::new(self.parameters.clone(), true);
+        let state = Arc::new(self.state);
 
-        primary
+        // Start the primary.
+        primary_node
             .start(
                 self.primary_keypair,
                 self.network_keypair,
                 self.committee.clone(),
                 self.worker_cache.clone(),
-                &self.p_store,
-                Arc::new(bft_execution_state),
+                &self.primary_store,
+                Arc::clone(&state),
             )
             .await?;
+        info!("Created a primary with public key {}.", primary_pub);
 
-        info!("Created a primary with id {} and public key {}", self.id, primary_pub);
+        // Start the workers associated with the primary.
+        let num_workers = self.worker_keypairs.len();
+        let mut worker_nodes = Vec::with_capacity(num_workers);
+        for (worker_id, worker_keypair) in self.worker_keypairs.into_iter().enumerate() {
+            let worker = WorkerNode::new(worker_id as u32, self.parameters.clone());
 
-        let worker = WorkerNode::new(0, self.parameters.clone());
-        let worker_pub = self.worker_keypair.public().clone();
-        worker
-            .start(
-                primary_pub,
-                self.worker_keypair,
-                self.committee.clone(),
-                self.worker_cache,
-                &self.w_store,
-                TransactionValidator(self.aleo_consensus),
-            )
-            .await?;
-        info!("Created a worker with id 0 and public key {}", worker_pub);
+            worker
+                .start(
+                    primary_pub.clone(),
+                    worker_keypair,
+                    self.committee.clone(),
+                    self.worker_cache.clone(),
+                    &self.worker_stores[worker_id],
+                    self.validator.clone(),
+                )
+                .await?;
+            info!("Created a worker with id {worker_id}.");
 
-        Ok((primary, worker))
+            worker_nodes.push(worker);
+        }
+
+        let instance = RunningConsensusInstance { primary_node, worker_nodes, worker_cache: self.worker_cache, state };
+
+        Ok(instance)
+    }
+}
+
+// An instance of BFT consensus that has been started.
+#[derive(Clone)]
+pub struct RunningConsensusInstance<T: ExecutionState> {
+    pub primary_node: PrimaryNode,
+    pub worker_nodes: Vec<WorkerNode>, // TODO: possibly change to the WorkerNodes struct
+    pub worker_cache: Arc<ArcSwap<WorkerCache>>,
+    pub state: Arc<T>,
+}
+
+impl<T: ExecutionState> RunningConsensusInstance<T> {
+    // Spawns transaction clients capable of sending txs to BFT workers.
+    // TODO: consider alternatives to tonic's Channel?
+    pub fn spawn_tx_clients(&self) -> Vec<TransactionsClient<Channel>> {
+        let mut tx_uris = Vec::with_capacity(
+            self.worker_cache.load().workers.values().map(|worker_index| worker_index.0.len()).sum(),
+        );
+        for worker_set in self.worker_cache.load().workers.values() {
+            for worker_info in worker_set.0.values() {
+                // Construct an address usable by the tonic channel based on the worker's tx Multiaddr.
+                let mut tx_ip = None;
+                let mut tx_port = None;
+                for component in &worker_info.transactions {
+                    match component {
+                        Protocol::Ip4(ip) => tx_ip = Some(IpAddr::V4(ip)),
+                        Protocol::Ip6(ip) => tx_ip = Some(IpAddr::V6(ip)),
+                        Protocol::Tcp(port) => tx_port = Some(port),
+                        _ => {} // TODO: do we expect other combinations?
+                    }
+                }
+                // TODO: these may be known in advance, but shouldn't be trusted when we switch to a dynamic committee
+                let tx_ip = tx_ip.unwrap();
+                let tx_port = tx_port.unwrap();
+
+                let tx_uri = format!("http://{tx_ip}:{tx_port}");
+                tx_uris.push(tx_uri);
+            }
+        }
+
+        // Sort the channel URIs by port for greater determinism in local tests.
+        tx_uris.sort_unstable();
+
+        // Create tx channels.
+        tx_uris
+            .into_iter()
+            .map(|uri| {
+                let channel = Channel::from_shared(uri).unwrap().connect_lazy();
+                TransactionsClient::new(channel)
+            })
+            .collect()
     }
 }

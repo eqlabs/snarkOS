@@ -23,13 +23,15 @@ use snarkvm::prelude::TestRng;
 
 mod common;
 
-use common::{CommitteeSetup, PrimarySetup, TestBftExecutionState};
+use common::{generate_consensus_instances, TestBftExecutionState};
+use snarkos_node_bft_consensus::setup::{CommitteeSetup, PrimarySetup};
 
+// Makes sure that all the primaries have identical state after
+// having processed a range of transactions using the consensus.
 #[tokio::test(flavor = "multi_thread")]
 async fn verify_state_coherence() {
     // Configure the primary-related variables.
     const NUM_PRIMARIES: usize = 5;
-    const WORKERS_PER_PRIMARY: u32 = 1;
     const PRIMARY_STAKE: u64 = 1;
 
     // Configure the transactions.
@@ -41,24 +43,26 @@ async fn verify_state_coherence() {
     // Generate the committee setup.
     let mut primaries = Vec::with_capacity(NUM_PRIMARIES);
     for _ in 0..NUM_PRIMARIES {
-        let primary = PrimarySetup::new(PRIMARY_STAKE, WORKERS_PER_PRIMARY, &mut rng);
+        let primary = PrimarySetup::new(None, PRIMARY_STAKE, vec![], &mut rng);
         primaries.push(primary);
     }
-    let mut committee = CommitteeSetup::new(primaries, 0);
-
-    // Create transaction clients.
-    let mut tx_clients = committee.tx_clients();
+    let committee = CommitteeSetup::new(primaries, 0);
 
     // Prepare the initial state.
     let state = TestBftExecutionState::default();
 
-    // Create and start the preconfigured consensus instances.
-    let inert_consensus_instances = committee.generate_consensus_instances(state.clone());
+    // Create the preconfigured consensus instances.
+    let inert_consensus_instances = generate_consensus_instances(committee, state.clone());
+
+    // Start the consensus instances.
     let mut running_consensus_instances = Vec::with_capacity(NUM_PRIMARIES);
     for instance in inert_consensus_instances {
         let running_instance = instance.start().await.unwrap();
         running_consensus_instances.push(running_instance);
     }
+
+    // Create transaction clients; any instance can be used to do that.
+    let mut tx_clients = running_consensus_instances[0].spawn_tx_clients();
 
     // Use a deterministic Rng for transaction generation.
     let mut rng = TestRng::default();
@@ -90,6 +94,8 @@ async fn verify_state_coherence() {
     }
 }
 
+// Ensures that a 4-member committee can survive a single member failure,
+// and that it ceases to function with a single additional failure.
 #[tokio::test(flavor = "multi_thread")]
 async fn primary_failures() {
     // Configure the primary-related variables.
@@ -106,24 +112,26 @@ async fn primary_failures() {
     // Generate the committee setup.
     let mut primaries = Vec::with_capacity(NUM_PRIMARIES);
     for _ in 0..NUM_PRIMARIES {
-        let primary = PrimarySetup::new(PRIMARY_STAKE, WORKERS_PER_PRIMARY, &mut rng);
+        let primary = PrimarySetup::new(None, PRIMARY_STAKE, vec![], &mut rng);
         primaries.push(primary);
     }
-    let mut committee = CommitteeSetup::new(primaries, 0);
-
-    // Create transaction clients.
-    let mut tx_clients = committee.tx_clients();
+    let committee = CommitteeSetup::new(primaries, 0);
 
     // Prepare the initial state.
     let state = TestBftExecutionState::default();
 
-    // Create and start the preconfigured consensus instances.
-    let inert_consensus_instances = committee.generate_consensus_instances(state.clone());
+    // Create the preconfigured consensus instances.
+    let inert_consensus_instances = generate_consensus_instances(committee, state.clone());
+
+    // Start the consensus instances.
     let mut running_consensus_instances = Vec::with_capacity(NUM_PRIMARIES);
     for instance in inert_consensus_instances {
         let running_instance = instance.start().await.unwrap();
         running_consensus_instances.push(running_instance);
     }
+
+    // Create transaction clients; any instance can be used to do that.
+    let mut tx_clients = running_consensus_instances[0].spawn_tx_clients();
 
     // Use a deterministic Rng for transaction generation.
     let mut rng = TestRng::default();
@@ -151,6 +159,7 @@ async fn primary_failures() {
     // Kill one of the consensus instances and shut down the corresponding transaction client.
     let instance_idx = rng.gen_range(0..NUM_PRIMARIES);
     let instance = running_consensus_instances.remove(instance_idx);
+
     instance.primary_node.shutdown().await;
     drop(instance);
     tx_clients.remove(instance_idx);

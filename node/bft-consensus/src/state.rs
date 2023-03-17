@@ -28,14 +28,16 @@ use snarkos_node_router::Router;
 use snarkos_node_tcp::protocols::Writing;
 use snarkvm::prelude::{ConsensusStorage, Network};
 
-pub(crate) struct BftExecutionState<N: Network, C: ConsensusStorage<N>> {
+// The state available to the BFT consensus.
+#[derive(Clone)]
+pub struct BftExecutionState<N: Network, C: ConsensusStorage<N>> {
     primary_pub: BLS12381PublicKey,
     router: Router<N>,
     consensus: AleoConsensus<N, C>,
 }
 
 impl<N: Network, C: ConsensusStorage<N>> BftExecutionState<N, C> {
-    pub(crate) fn new(primary_pub: BLS12381PublicKey, router: Router<N>, consensus: AleoConsensus<N, C>) -> Self {
+    pub fn new(primary_pub: BLS12381PublicKey, router: Router<N>, consensus: AleoConsensus<N, C>) -> Self {
         Self { primary_pub, router, consensus }
     }
 }
