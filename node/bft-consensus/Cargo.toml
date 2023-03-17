@@ -30,7 +30,6 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 prometheus = "0.13"
 arc-swap = "1.5.1"
 anyhow = "1"
-thiserror = "1.0.38"
 
 [dev-dependencies]
 multiaddr = "0.17"
