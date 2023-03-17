@@ -30,7 +30,6 @@ use narwhal_executor::ExecutionState;
 use narwhal_node::{primary_node::PrimaryNode, worker_node::WorkerNode, NodeStorage};
 use narwhal_types::{Batch, ConsensusOutput};
 use std::{path::PathBuf, sync::Arc};
-use thiserror::Error;
 use tracing::*;
 
 use aleo_std::aleo_dir;
@@ -53,12 +52,6 @@ pub struct BftConsensus<N: Network, C: ConsensusStorage<N>> {
     worker_cache: Arc<ArcSwap<WorkerCache>>,
     aleo_consensus: AleoConsensus<N, C>,
     aleo_router: Router<N>,
-}
-
-#[derive(Error, Debug)]
-pub enum BftError {
-    #[error("Error in BFT: {0}")]
-    EyreReport(String),
 }
 
 fn base_path(dev: Option<u16>) -> PathBuf {
