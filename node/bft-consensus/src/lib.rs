@@ -119,28 +119,29 @@ impl<N: Network, C: ConsensusStorage<N>> BftConsensus<N, C> {
         // Offset here as the beacon is started on 0 and validators have their keys counted from 0
         // currently.
         let id = dev.expect("only dev mode is supported currently") - 1;
-        let primary_key_file = format!("{}/.primary-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
+        let primary_key_file = format!("{}/committee/.primary-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
         let primary_keypair =
             read_authority_keypair_from_file(primary_key_file).expect("Failed to load the node's primary keypair");
-        let primary_network_key_file = format!("{}/.primary-{id}-network-key.json", env!("CARGO_MANIFEST_DIR"));
+        let primary_network_key_file =
+            format!("{}/committee/.primary-{id}-network-key.json", env!("CARGO_MANIFEST_DIR"));
         let network_keypair = read_network_keypair_from_file(primary_network_key_file)
             .expect("Failed to load the node's primary network keypair");
-        let worker_key_file = format!("{}/.worker-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
+        let worker_key_file = format!("{}/committee/.worker-{id}-key.json", env!("CARGO_MANIFEST_DIR"));
         let worker_keypair =
             read_network_keypair_from_file(worker_key_file).expect("Failed to load the node's worker keypair");
         debug!("creating task {}", id);
         // Read the committee, workers and node's keypair from file.
-        let committee_file = format!("{}/.committee.json", env!("CARGO_MANIFEST_DIR"));
+        let committee_file = format!("{}/committee/.committee.json", env!("CARGO_MANIFEST_DIR"));
         let committee = Arc::new(ArcSwap::from_pointee(
             Committee::import(&committee_file).expect("Failed to load the committee information"),
         ));
-        let workers_file = format!("{}/.workers.json", env!("CARGO_MANIFEST_DIR"));
+        let workers_file = format!("{}/committee/.workers.json", env!("CARGO_MANIFEST_DIR"));
         let worker_cache = Arc::new(ArcSwap::from_pointee(
             WorkerCache::import(&workers_file).expect("Failed to load the worker information"),
         ));
 
         // Load default parameters if none are specified.
-        let filename = format!("{}/.parameters.json", env!("CARGO_MANIFEST_DIR"));
+        let filename = format!("{}/committee/.parameters.json", env!("CARGO_MANIFEST_DIR"));
         let parameters = Parameters::import(&filename).expect("Failed to load the node's parameters");
 
         // Make the data store.
