@@ -21,7 +21,7 @@ use axum::{
     headers::authorization::{Authorization, Bearer},
     http::{Request, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
     RequestPartsExt,
     TypedHeader,
 };
@@ -72,24 +72,25 @@ impl Claims {
     }
 }
 
-pub async fn auth_middleware<B>(request: Request<B>, next: Next<B>) -> Result<Response, StatusCode>
+pub async fn auth_middleware<B>(request: Request<B>, next: Next<B>) -> Result<Response, Response>
 where
     B: Send,
 {
     // Deconstruct the request to extract the auth token.
     let (mut parts, body) = request.into_parts();
-    let auth: TypedHeader<Authorization<Bearer>> = parts.extract().await.map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let auth: TypedHeader<Authorization<Bearer>> =
+        parts.extract().await.map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
 
     match decode::<Claims>(auth.token(), &DecodingKey::from_secret(jwt_secret()), &Validation::new(Algorithm::HS256)) {
         Ok(decoded) => {
             let claims = decoded.claims;
             if claims.is_expired() {
-                return Err(StatusCode::UNAUTHORIZED);
+                return Err((StatusCode::UNAUTHORIZED, format!("Expired JSON Web Token")).into_response());
             }
         }
 
         Err(_) => {
-            return Err(StatusCode::UNAUTHORIZED);
+            return Err(StatusCode::UNAUTHORIZED.into_response());
         }
     }
 
