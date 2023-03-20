@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use std::time::Duration;
+use std::{sync::atomic::Ordering, time::Duration};
 
 use bytes::Bytes;
 use narwhal_types::TransactionProto;
@@ -98,13 +98,16 @@ async fn verify_state_coherence() {
 // and that it ceases to function with a single additional failure.
 #[tokio::test(flavor = "multi_thread")]
 async fn primary_failures() {
+    // TODO: while this test is currently hardcoded to 4 primaries and 30
+    // txs, there's no reason why it couldn't work for any number of them,
+    // but it would require a bit of extra work.
+
     // Configure the primary-related variables.
-    const NUM_PRIMARIES: usize = 4;
-    const WORKERS_PER_PRIMARY: u32 = 1;
+    const NUM_PRIMARIES: usize = 4; // this shouldn't be altered on its own
     const PRIMARY_STAKE: u64 = 1;
 
     // Configure the transactions.
-    const NUM_TRANSACTIONS: usize = 30;
+    const NUM_TRANSACTIONS: usize = 30; // this shouldn't be altered on its own
 
     // Prepare a source of randomness for key generation.
     let mut rng = thread_rng();
@@ -153,8 +156,11 @@ async fn primary_failures() {
     // Wait for a while to allow the transfers to be processed.
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // Save the current balances.
-    let balances1 = running_consensus_instances.iter().map(|rci| rci.state.balances.lock().clone()).collect::<Vec<_>>();
+    // Save the current numbers for processed transactions.
+    let tx_counts1 = running_consensus_instances
+        .iter()
+        .map(|rci| rci.state.processed_txs.load(Ordering::SeqCst))
+        .collect::<Vec<_>>();
 
     // Kill one of the consensus instances and shut down the corresponding transaction client.
     let instance_idx = rng.gen_range(0..NUM_PRIMARIES);
@@ -178,11 +184,16 @@ async fn primary_failures() {
     // Wait for a while to allow the transfers to be processed.
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // Save the current balances.
-    let balances2 = running_consensus_instances.iter().map(|rci| rci.state.balances.lock().clone()).collect::<Vec<_>>();
+    // Save the current numbers for processed transactions.
+    let tx_counts2 = running_consensus_instances
+        .iter()
+        .map(|rci| rci.state.processed_txs.load(Ordering::SeqCst))
+        .collect::<Vec<_>>();
 
-    // First check: the balances should have changed, as a single missing primary shouldn't break the consensus.
-    assert_ne!(balances1[..NUM_PRIMARIES - 1], balances2);
+    // First check: the processed tx counts should have changed, as a single missing primary shouldn't break the consensus.
+    for (count1, count2) in tx_counts1.iter().zip(&tx_counts2) {
+        assert!(count2 > count1);
+    }
 
     // Kill another one of the primaries and shut down the corresponding transaction client.
     let instance_idx = rng.gen_range(0..NUM_PRIMARIES - 1);
@@ -207,9 +218,12 @@ async fn primary_failures() {
     // Wait for a while to allow the transfers to be processed.
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // Save the current balances.
-    let balances3 = running_consensus_instances.iter().map(|rci| rci.state.balances.lock().clone()).collect::<Vec<_>>();
+    // Save the current numbers for processed transactions.
+    let tx_counts3 = running_consensus_instances
+        .iter()
+        .map(|rci| rci.state.processed_txs.load(Ordering::SeqCst))
+        .collect::<Vec<_>>();
 
-    // Final check: the balances should NOT have changed, as another missing primary should break the consensus.
-    assert_eq!(balances2[..NUM_PRIMARIES - 2], balances3);
+    // Final check: the processed tx counts should NOT have changed, as another missing primary should break the consensus.
+    assert_eq!(tx_counts3, &tx_counts2[..2]);
 }
