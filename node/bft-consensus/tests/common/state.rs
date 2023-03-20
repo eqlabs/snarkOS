@@ -14,7 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::HashMap, fmt, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 use async_trait::async_trait;
 use narwhal_executor::ExecutionState;
@@ -33,18 +40,24 @@ pub type Amount = u64;
 // A simple state for BFT consensus tests.
 pub struct TestBftExecutionState {
     pub balances: Mutex<HashMap<Address, Amount>>,
+    pub processed_txs: AtomicUsize,
     pub storage_dir: Arc<TempDir>,
 }
 
 impl Clone for TestBftExecutionState {
     fn clone(&self) -> Self {
-        Self { balances: Mutex::new(self.balances.lock().clone()), storage_dir: Arc::clone(&self.storage_dir) }
+        Self {
+            balances: Mutex::new(self.balances.lock().clone()),
+            processed_txs: self.processed_txs.load(Ordering::SeqCst).into(),
+            storage_dir: Arc::clone(&self.storage_dir),
+        }
     }
 }
 
 impl PartialEq for TestBftExecutionState {
     fn eq(&self, other: &Self) -> bool {
-        *self.balances.lock() == *other.balances.lock()
+        self.processed_txs.load(Ordering::SeqCst) == other.processed_txs.load(Ordering::SeqCst)
+            && *self.balances.lock() == *other.balances.lock()
     }
 }
 
@@ -52,7 +65,12 @@ impl Eq for TestBftExecutionState {}
 
 impl fmt::Debug for TestBftExecutionState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &*self.balances.lock())
+        write!(
+            f,
+            "processed txs: {}, balances: {:?}",
+            self.processed_txs.load(Ordering::SeqCst),
+            &*self.balances.lock()
+        )
     }
 }
 
@@ -66,7 +84,7 @@ impl Default for TestBftExecutionState {
 
         let storage_dir = Arc::new(TempDir::new().unwrap());
 
-        Self { balances, storage_dir }
+        Self { balances, processed_txs: Default::default(), storage_dir }
     }
 }
 
@@ -91,6 +109,8 @@ impl TestBftExecutionState {
         let mut balances = self.balances.lock();
 
         for transaction in transactions {
+            self.processed_txs.fetch_add(1, Ordering::Relaxed);
+
             match transaction {
                 Transaction::Transfer(Transfer { from, to, amount }) => {
                     if amount > MAX_TRANSFER_AMOUNT {
