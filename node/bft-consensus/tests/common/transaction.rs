@@ -20,11 +20,13 @@ use super::state::{Address, Amount};
 
 pub const MAX_TRANSFER_AMOUNT: u64 = 10_000;
 
+// A test transaction to be used in the BFT consensus.
 #[derive(Serialize, Deserialize)]
 pub enum Transaction {
     Transfer(Transfer),
 }
 
+// A simple transfer from A to B.
 #[derive(Serialize, Deserialize)]
 pub struct Transfer {
     pub from: Address,
