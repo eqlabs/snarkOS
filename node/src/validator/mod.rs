@@ -38,6 +38,7 @@ use snarkvm::prelude::{Block, ConsensusStorage, Header, Network, ProverSolution}
 
 use anyhow::Result;
 use fastcrypto::traits::KeyPair;
+use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use rand::thread_rng;
 use std::{
@@ -67,7 +68,7 @@ pub struct Validator<N: Network, C: ConsensusStorage<N>> {
     /// The shutdown signal.
     shutdown: Arc<AtomicBool>,
     /// The running BFT consensus instance.
-    bft: Option<RunningConsensusInstance<BftExecutionState<N, C>>>,
+    bft: Arc<OnceCell<RunningConsensusInstance<BftExecutionState<N, C>>>>,
 }
 
 impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
@@ -113,7 +114,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             rest: None,
             handles: Default::default(),
             shutdown: Default::default(),
-            bft: None,
+            bft: Default::default(),
         };
 
         // Initialize the REST server.
@@ -168,7 +169,8 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         let inert_bft_consensus = InertConsensusInstance::load::<N, C>(bft_execution_state, bft_tx_validator, dev)?;
         let running_bft_consensus = inert_bft_consensus.start().await.unwrap();
 
-        node.bft = Some(running_bft_consensus);
+        // Can't fail, but RunningConsensusInstance doesn't impl Debug, hence no unwrap.
+        let _ = node.bft.set(running_bft_consensus);
 
         // Return the node.
         Ok(node)
@@ -185,9 +187,9 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
     }
 
     /// Return the BFT consensus handle.
-    #[cfg(feature = "test")]
     pub fn bft(&self) -> &RunningConsensusInstance<BftExecutionState<N, C>> {
-        self.bft.as_ref().unwrap()
+        // Safe: it is used only once it's populated.
+        self.bft.get().unwrap()
     }
 
     #[cfg(feature = "test")]

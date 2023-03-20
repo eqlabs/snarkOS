@@ -16,6 +16,7 @@
 
 use super::*;
 
+use snarkos_node_bft_consensus::sort_transactions;
 use snarkos_node_messages::{
     BlockRequest,
     BlockResponse,
@@ -32,8 +33,9 @@ use snarkos_node_messages::{
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{error, Network, Transaction};
 
+use bytes::BytesMut;
 use futures_util::sink::SinkExt;
-use std::{io, net::SocketAddr, time::Duration};
+use std::{collections::HashSet, io, net::SocketAddr, time::Duration};
 
 impl<N: Network, C: ConsensusStorage<N>> P2P for Validator<N, C> {
     /// Returns a reference to the TCP instance.
@@ -175,6 +177,49 @@ impl<N: Network, C: ConsensusStorage<N>> Inbound<N> for Validator<N, C> {
         if self.consensus.check_next_block(&block).is_err() {
             return true;
         }
+
+        // If the previous consensus output is available, check the order of transactions.
+        if let Some(last_consensus_output) = self.bft().state.last_output.lock().clone() {
+            let mut expected_txs = last_consensus_output
+                .batches
+                .iter()
+                .flat_map(|batches| batches.1.iter().flat_map(|batch| &batch.transactions))
+                .map(|bytes| {
+                    // Safe; it's our own consensus output, so we already processed this tx with the TransactionValidator.
+                    // Also, it's fast to deserialize, because we only process the ID and keep the actual tx as a blob.
+                    // This, of course, assumes that only the ID is used for sorting.
+                    let message = Message::<N>::deserialize(BytesMut::from(&bytes[..])).unwrap();
+
+                    let unconfirmed_tx = if let Message::UnconfirmedTransaction(tx) = message {
+                        tx
+                    } else {
+                        // TransactionValidator ensures that the Message is an UnconfirmedTransaction.
+                        unreachable!();
+                    };
+
+                    unconfirmed_tx.transaction_id
+                })
+                .collect::<HashSet<_>>();
+
+            // Remove the ids that are not present in the block (presumably dropped due to ledger rejection).
+            let block_txs = block.transaction_ids().copied().collect::<HashSet<_>>();
+            for id in &expected_txs.clone() {
+                if !block_txs.contains(id) {
+                    expected_txs.remove(id);
+                }
+            }
+
+            // Sort the txs according to shared logic.
+            let mut expected_txs = expected_txs.into_iter().collect::<Vec<_>>();
+            sort_transactions::<N>(&mut expected_txs);
+
+            if block.transaction_ids().zip(&expected_txs).any(|(id1, id2)| id1 != id2) {
+                error!("[NewBlock] Invalid order of transactions");
+                return false;
+            }
+        }
+
+        // Attempt to add the block to the ledger.
         if let Err(err) = self.consensus.advance_to_next_block(&block) {
             error!("[NewBlock] {err}");
             return false;

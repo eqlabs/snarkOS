@@ -20,7 +20,7 @@ mod validation;
 
 use setup::*;
 
-pub use state::BftExecutionState;
+pub use state::{sort_transactions, BftExecutionState};
 pub use validation::TransactionValidator;
 
 use anyhow::Result;
