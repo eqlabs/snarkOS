@@ -189,7 +189,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
     /// Return the BFT consensus handle.
     pub fn bft(&self) -> &RunningConsensusInstance<BftExecutionState<N, C>> {
         // Safe: it is used only once it's populated.
-        self.bft.get().unwrap()
+        self.bft.get().expect("Logic bug: Validator::bft didn't find a RunningConsensusInstance!")
     }
 
     #[cfg(feature = "test")]
