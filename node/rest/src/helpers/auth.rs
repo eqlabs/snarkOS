@@ -85,7 +85,7 @@ where
         Ok(decoded) => {
             let claims = decoded.claims;
             if claims.is_expired() {
-                return Err((StatusCode::UNAUTHORIZED, format!("Expired JSON Web Token")).into_response());
+                return Err((StatusCode::UNAUTHORIZED, "Expired JSON Web Token").into_response());
             }
         }
 
