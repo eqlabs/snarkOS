@@ -530,8 +530,6 @@ async fn test_bullshark_full() {
     // The number of validators to run.
     // TODO: support a different number than 4.
     const N_VALIDATORS: u16 = 4;
-    // The number of transactions to process.
-    const N_TRANSACTIONS: usize = 250;
 
     // The randomly-seeded source of deterministic randomness.
     let mut rng = TestRng::default();
@@ -673,7 +671,7 @@ function hello:
     tokio::task::spawn_blocking(move || {
         let inputs = [Value::from_str("10u32").unwrap(), Value::from_str("100u32").unwrap()];
 
-        for i in 0..N_TRANSACTIONS {
+        for i in 0.. {
             let transaction = Transaction::execute(
                 consensus.ledger.vm(),
                 &genesis_private_key,
@@ -686,7 +684,7 @@ function hello:
             )
             .unwrap();
 
-            info!("Created transaction {} ({}/{}).", transaction.id(), i + 1, N_TRANSACTIONS);
+            info!("Created transaction {} ({}/inf).", transaction.id(), i + 1);
 
             tx_sender.send(transaction).unwrap();
         }
