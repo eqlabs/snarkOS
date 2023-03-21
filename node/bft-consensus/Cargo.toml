@@ -12,6 +12,7 @@ async-trait = "0.1"
 bincode = "1"
 bytes = "1"
 multiaddr = "0.17"
+parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt"] }
 tonic = "0.8"
