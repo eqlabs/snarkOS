@@ -147,8 +147,10 @@ impl ExecutionState for TestBftExecutionState {
         let round = consensus_output.sub_dag.round();
         let sdi = consensus_output.sub_dag.sub_dag_index;
         let nb = consensus_output.sub_dag.num_batches();
+
         info!("Consensus [leader: {leader}, round: {round}, sdi: {sdi}, num_batches: {nb}]:");
 
+        // Return early if there's no transactions.
         if consensus_output.batches.is_empty() {
             return;
         }
@@ -162,7 +164,6 @@ impl ExecutionState for TestBftExecutionState {
                 }
             }
         }
-
         self.process_transactions(transactions);
     }
 
