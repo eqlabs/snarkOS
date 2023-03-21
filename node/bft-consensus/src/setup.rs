@@ -156,6 +156,7 @@ impl CommitteeSetup {
 
     // Generates a Committee.
     pub fn generate_committee(&self) -> Committee {
+        #[allow(clippy::mutable_key_type)]
         let mut authorities = BTreeMap::default();
         for primary in &self.primaries {
             let authority = Authority {
@@ -172,6 +173,7 @@ impl CommitteeSetup {
 
     // Generates a WorkerCache.
     pub fn generate_worker_cache(&self) -> WorkerCache {
+        #[allow(clippy::mutable_key_type)]
         let mut workers = BTreeMap::default();
         for primary in &self.primaries {
             let mut worker_index = BTreeMap::default();
