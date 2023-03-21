@@ -141,8 +141,15 @@ impl TestBftExecutionState {
 #[async_trait]
 impl ExecutionState for TestBftExecutionState {
     async fn handle_consensus_output(&self, consensus_output: ConsensusOutput) {
+        // Register and log some useful information.
+        let mut leader = consensus_output.sub_dag.leader.header.author.to_string();
+        leader.truncate(8);
+        let round = consensus_output.sub_dag.round();
+        let sdi = consensus_output.sub_dag.sub_dag_index;
+        let nb = consensus_output.sub_dag.num_batches();
+        info!("Consensus [leader: {leader}, round: {round}, sdi: {sdi}, num_batches: {nb}]:");
+
         if consensus_output.batches.is_empty() {
-            info!("There are no batches to process.");
             return;
         }
 
