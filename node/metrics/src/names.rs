@@ -16,12 +16,12 @@
 
 pub const GAUGE_NAMES: [&str; 8] = [
     blocks::HEIGHT,
-    peers::CONNECTED,
-    peers::CANDIDATE,
-    peers::RESTRICTED,
     consensus::COMMITTED_CERTIFICATES,
     consensus::LAST_COMMITTED_ROUND,
     network::NETWORK_PEERS,
+    peers::CANDIDATE,
+    peers::CONNECTED,
+    peers::RESTRICTED,
     primary::CURRENT_ROUND,
 ];
 pub const COUNTER_NAMES: [&str; 1] = [consensus::LEADERS_ELECTED];

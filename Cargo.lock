@@ -2833,7 +2833,7 @@ dependencies = [
 [[package]]
 name = "narwhal-consensus"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "arc-swap",
  "bincode 1.3.3",
@@ -2860,7 +2860,7 @@ dependencies = [
 [[package]]
 name = "narwhal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "eyre",
  "fastcrypto",
@@ -2878,7 +2878,7 @@ dependencies = [
 [[package]]
 name = "narwhal-dag"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "arc-swap",
  "dashmap",
@@ -2895,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "narwhal-executor"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -2933,7 +2933,7 @@ dependencies = [
 [[package]]
 name = "narwhal-network"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -2965,7 +2965,7 @@ dependencies = [
 [[package]]
 name = "narwhal-node"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "anemo",
  "anyhow",
@@ -3015,7 +3015,7 @@ dependencies = [
 [[package]]
 name = "narwhal-primary"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -3061,7 +3061,7 @@ dependencies = [
 [[package]]
 name = "narwhal-storage"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "dashmap",
  "fail",
@@ -3082,7 +3082,7 @@ dependencies = [
 [[package]]
 name = "narwhal-types"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "anemo",
  "anemo-build",
@@ -3124,7 +3124,7 @@ dependencies = [
 [[package]]
 name = "narwhal-worker"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -6342,7 +6342,7 @@ dependencies = [
 [[package]]
 name = "typed-store"
 version = "0.4.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#c99fe69532f6c5d75b0d22b617a6edeecce90b95"
+source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
 dependencies = [
  "async-trait",
  "bincode 1.3.3",
