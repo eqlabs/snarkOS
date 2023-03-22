@@ -20,6 +20,7 @@ edition = "2021"
 default = []
 test = []
 timer = [ "aleo-std/timer", "snarkos-node-ledger/timer" ]
+metrics = ["snarkos-node-bft-consensus/metrics"]
 
 [dependencies] # added for BFT
 narwhal-types.workspace = true
