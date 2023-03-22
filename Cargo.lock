@@ -4837,6 +4837,7 @@ dependencies = [
  "async-trait",
  "bincode 1.3.3",
  "bytes",
+ "deadline",
  "fastcrypto",
  "multiaddr",
  "narwhal-config",
