@@ -2766,7 +2766,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 [[package]]
 name = "mysten-network"
 version = "0.2.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "bincode 1.3.3",
  "bytes",
@@ -2787,7 +2787,7 @@ dependencies = [
 [[package]]
 name = "mysten-util-mem"
 version = "0.11.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "cfg-if",
  "ed25519-consensus",
@@ -2805,7 +2805,7 @@ dependencies = [
 [[package]]
 name = "mysten-util-mem-derive"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "proc-macro2 1.0.51",
  "syn 1.0.107",
@@ -2815,7 +2815,7 @@ dependencies = [
 [[package]]
 name = "narwhal-config"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "arc-swap",
  "fastcrypto",
@@ -2833,7 +2833,7 @@ dependencies = [
 [[package]]
 name = "narwhal-consensus"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "arc-swap",
  "bincode 1.3.3",
@@ -2858,7 +2858,7 @@ dependencies = [
 [[package]]
 name = "narwhal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "eyre",
  "fastcrypto",
@@ -2876,7 +2876,7 @@ dependencies = [
 [[package]]
 name = "narwhal-dag"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "arc-swap",
  "dashmap",
@@ -2893,7 +2893,7 @@ dependencies = [
 [[package]]
 name = "narwhal-executor"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -2929,7 +2929,7 @@ dependencies = [
 [[package]]
 name = "narwhal-network"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -2959,7 +2959,7 @@ dependencies = [
 [[package]]
 name = "narwhal-node"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "anemo",
  "anyhow",
@@ -3009,7 +3009,7 @@ dependencies = [
 [[package]]
 name = "narwhal-primary"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -3053,7 +3053,7 @@ dependencies = [
 [[package]]
 name = "narwhal-storage"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "dashmap",
  "fail",
@@ -3074,7 +3074,7 @@ dependencies = [
 [[package]]
 name = "narwhal-types"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "anemo",
  "anemo-build",
@@ -3116,7 +3116,7 @@ dependencies = [
 [[package]]
 name = "narwhal-worker"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -5769,7 +5769,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "telemetry-subscribers"
 version = "0.2.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "crossterm 0.25.0",
  "once_cell",
@@ -6323,7 +6323,7 @@ dependencies = [
 [[package]]
 name = "typed-store"
 version = "0.4.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/#c8bd021ed51340049a9f3563f37e5993352f2630"
+source = "git+https://github.com/eqlabs/bullshark-bft/#c0e3aeba9a5d51659ebaac1c75bd0e7f5443f701"
 dependencies = [
  "async-trait",
  "bincode 1.3.3",
