@@ -202,7 +202,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
 
         // Read the shared files describing the committee, workers and parameters.
         let committee_file = format!("{base_path}.committee.json");
-        let committee = Committee::import(&committee_file).expect("Failed to load the committee information").into();
+        let committee = Committee::import(&committee_file).expect("Failed to load the committee information");
 
         (primary_keypair, committee)
     }

@@ -95,7 +95,7 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
             // Check the signature.
             // TODO: again, the signed message should probably be something we send to the peer, not
             // their public key.
-            if let Err(_) = quorum.public_key.verify(&quorum.public_key.as_bytes(), &quorum.signature) {
+            if quorum.public_key.verify(quorum.public_key.as_bytes(), &quorum.signature).is_err() {
                 return Err(error(format!("'{peer_addr}' couldn't verify their identity")));
             }
 
