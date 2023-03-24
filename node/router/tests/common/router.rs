@@ -75,7 +75,7 @@ impl<N: Network> Handshake for TestRouter<N> {
         let conn_side = connection.side();
         let stream = self.borrow_stream(&mut connection);
         let genesis_header = *sample_genesis_block().header();
-        let (peer_ip, mut framed) = self.router().handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, mut framed) = self.router().handshake(peer_addr, stream, conn_side, genesis_header).await?;
 
         // Send the first `Ping` message to the peer.
         let message = Message::Ping(Ping::<N> {
@@ -83,7 +83,7 @@ impl<N: Network> Handshake for TestRouter<N> {
             node_type: self.node_type(),
             block_locators: None,
         });
-        trace!("Sending '{}' to '{peer_ip}'", message.name());
+        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
         framed.send(message).await?;
 
         Ok(connection)

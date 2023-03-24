@@ -48,7 +48,10 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Client<N, C> {
         let conn_side = connection.side();
         let stream = self.borrow_stream(&mut connection);
         let genesis_header = *self.genesis.header();
-        let (peer_ip, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let peer_ip = peer.ip();
+
+        self.router.insert_connected_peer(peer, peer_addr);
 
         // Send the first `Ping` message to the peer.
         let message = Message::Ping(Ping::<N> {

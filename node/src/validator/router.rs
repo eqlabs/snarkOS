@@ -28,14 +28,20 @@ use snarkos_node_messages::{
     NewBlock,
     Ping,
     Pong,
+    Quorum,
     UnconfirmedTransaction,
 };
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{error, Network, Transaction};
 
 use bytes::BytesMut;
+use fastcrypto::{
+    traits::{Signer, ToFromBytes},
+    Verifier,
+};
 use futures_util::sink::SinkExt;
 use std::{collections::HashSet, io, net::SocketAddr, time::Duration};
+use tokio_stream::StreamExt;
 
 impl<N: Network, C: ConsensusStorage<N>> P2P for Validator<N, C> {
     /// Returns a reference to the TCP instance.
@@ -53,7 +59,63 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
         let conn_side = connection.side();
         let stream = self.borrow_stream(&mut connection);
         let genesis_header = self.ledger.get_header(0).map_err(|e| error(format!("{e}")))?;
-        let (peer_ip, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let peer_ip = peer.ip();
+
+        // Establish quorum with other validators:
+        //
+        // 1. Send sign and send pub key.
+        // 2. Receive and verify peer's signed pub key.
+        // 3. Insert into connected_committee_members.
+        // 4. If quorum threshold is reached, start the bft.
+
+        // This will only be present if the consensus hasn't been started yet.
+        if peer.node_type() == NodeType::Validator {
+            // 1.
+            // BFT must be set here.
+            // TODO: we should probably use something else than the public key, potentially interactive, since this could
+            // be copied and reused by a malicious validator.
+            let public_key = self.primary_keypair.public();
+            let signature = self.primary_keypair.sign(public_key.as_bytes());
+
+            let message = Message::Quorum(Box::new(Quorum { public_key: public_key.clone(), signature }));
+            framed.send(message).await?;
+
+            // 2.
+            let quorum = match framed.try_next().await? {
+                Some(Message::Quorum(data)) => data,
+                _ => return Err(error(format!("'{peer_addr}' did not send a quorum message"))),
+            };
+
+            // Check the advertised public key exists in the committee.
+            if !self.committee.keys().contains(&&quorum.public_key) {
+                return Err(error(format!("'{peer_addr}' is not part of the committee")));
+            }
+
+            // Check the signature.
+            // TODO: again, the signed message should probably be something we send to the peer, not
+            // their public key.
+            if let Err(_) = quorum.public_key.verify(&quorum.public_key.as_bytes(), &quorum.signature) {
+                return Err(error(format!("'{peer_addr}' couldn't verify their identity")));
+            }
+
+            // 3.
+            // Check if the peer already exists in the connected committee.
+            if !self.router.connected_committee_members.write().insert(quorum.public_key) {
+                return Err(error(format!("'{peer_addr}' is already a connected committee member")));
+            }
+
+            // 4.
+            // If quorum is reached, start the consensus but only if it hasn't already been started.
+            let connected_stake =
+                self.router.connected_committee_members.read().iter().map(|pk| self.committee.stake(pk)).sum::<u64>();
+            if connected_stake >= self.committee.quorum_threshold() && self.bft.get().is_none() {
+                self.start_bft().await.unwrap()
+            }
+        }
+
+        // Update the peer collections.
+        self.router.insert_connected_peer(peer, peer_addr);
 
         // Retrieve the block locators.
         let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
