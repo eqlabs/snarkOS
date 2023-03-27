@@ -83,9 +83,11 @@ impl<N: Network> Node<N> {
         cdn: Option<String>,
         dev: Option<u16>,
         enable_metrics: bool,
+        program_file: Option<String>,
     ) -> Result<Self> {
         Ok(Self::Validator(Arc::new(
-            Validator::new(node_ip, rest_ip, account, trusted_peers, genesis, cdn, dev, enable_metrics).await?,
+            Validator::new(node_ip, rest_ip, account, trusted_peers, genesis, cdn, dev, enable_metrics, program_file)
+                .await?,
         )))
     }
 

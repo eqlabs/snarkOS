@@ -6,3 +6,5 @@ wasm/Cargo.lock
 **/build
 **.ledger-*
 **/committee/.dev/
+validator-*.log
+.bft-storage*

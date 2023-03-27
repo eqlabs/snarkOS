@@ -69,6 +69,7 @@ pub async fn validator() -> Validator<CurrentNetwork, ConsensusMemory<CurrentNet
         None,                   // No CDN.
         Some(0),
         false,
+        None,
     )
     .await
     .expect("couldn't create validator instance")
