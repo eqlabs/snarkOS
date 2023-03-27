@@ -31,6 +31,7 @@ use snarkos_node_messages::{
     Quorum,
     UnconfirmedTransaction,
 };
+use snarkos_node_router::Peer;
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{error, Network, Transaction};
 
@@ -41,7 +42,9 @@ use fastcrypto::{
 };
 use futures_util::sink::SinkExt;
 use std::{collections::HashSet, io, net::SocketAddr, time::Duration};
+use tokio::net::TcpStream;
 use tokio_stream::StreamExt;
+use tokio_util::codec::Framed;
 
 impl<N: Network, C: ConsensusStorage<N>> P2P for Validator<N, C> {
     /// Returns a reference to the TCP instance.
@@ -59,8 +62,52 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
         let conn_side = connection.side();
         let stream = self.borrow_stream(&mut connection);
         let genesis_header = self.ledger.get_header(0).map_err(|e| error(format!("{e}")))?;
-        let (peer, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+
+        let (peer, mut framed) = match self.handshake_inner(peer_addr, stream, conn_side, genesis_header).await {
+            Ok((peer, framed)) => (peer, framed),
+
+            // Handle any handshake related errors that have been bubbled up, update the connecting
+            // peer collections.
+            Err(e) => {
+                self.router.connecting_peers.lock().remove(&peer_addr);
+                return Err(e);
+            }
+        };
         let peer_ip = peer.ip();
+
+        // Iff the handshake is succesful, update the peer connected collections and start ping
+        // loop.
+        self.router.insert_connected_peer(peer, peer_addr);
+
+        // Retrieve the block locators.
+        let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
+            Ok(block_locators) => Some(block_locators),
+            Err(e) => {
+                error!("Failed to get block locators: {e}");
+                return Err(error(format!("Failed to get block locators: {e}")));
+            }
+        };
+
+        // Send the first `Ping` message to the peer.
+        let message =
+            Message::Ping(Ping::<N> { version: Message::<N>::VERSION, node_type: self.node_type(), block_locators });
+        trace!("Sending '{}' to '{peer_ip}'", message.name());
+        framed.send(message).await?;
+
+        Ok(connection)
+    }
+}
+
+impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
+    async fn handshake_inner<'a>(
+        &'a self,
+        peer_addr: SocketAddr,
+        stream: &'a mut TcpStream,
+        peer_side: ConnectionSide,
+        genesis_header: Header<N>,
+    ) -> io::Result<(Peer<N>, Framed<&mut TcpStream, MessageCodec<N>>)> {
+        // Start with the general handshake logic from the router.
+        let (peer, mut framed) = self.router.handshake(peer_addr, stream, peer_side, genesis_header).await?;
 
         // Establish quorum with other validators:
         //
@@ -100,10 +147,11 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
             }
 
             // 3.
-            // Check if the peer already exists in the connected committee.
-            if !self.router.connected_committee_members.write().insert(quorum.public_key) {
-                return Err(error(format!("'{peer_addr}' is already a connected committee member")));
-            }
+            // Track the committee member.
+            // TODO: in future we could error here if it already exists in the collection but that
+            // would require removing disconnected committee members. That logic is probably best
+            // implemented when dynamic committees are being considered.
+            self.router.connected_committee_members.write().insert(quorum.public_key);
 
             // 4.
             // If quorum is reached, start the consensus but only if it hasn't already been started.
@@ -114,25 +162,7 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
             }
         }
 
-        // Update the peer collections.
-        self.router.insert_connected_peer(peer, peer_addr);
-
-        // Retrieve the block locators.
-        let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
-            Ok(block_locators) => Some(block_locators),
-            Err(e) => {
-                error!("Failed to get block locators: {e}");
-                return Err(error(format!("Failed to get block locators: {e}")));
-            }
-        };
-
-        // Send the first `Ping` message to the peer.
-        let message =
-            Message::Ping(Ping::<N> { version: Message::<N>::VERSION, node_type: self.node_type(), block_locators });
-        trace!("Sending '{}' to '{peer_ip}'", message.name());
-        framed.send(message).await?;
-
-        Ok(connection)
+        Ok((peer, framed))
     }
 }
 

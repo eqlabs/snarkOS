@@ -48,7 +48,16 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Prover<N, C> {
         let conn_side = connection.side();
         let stream = self.borrow_stream(&mut connection);
         let genesis_header = *self.genesis.header();
-        let (peer, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, mut framed) = match self.router.handshake(peer_addr, stream, conn_side, genesis_header).await {
+            Ok((peer, framed)) => (peer, framed),
+
+            // Handle any handshake related errors that have been bubbled up, update the connecting
+            // peer collections.
+            Err(e) => {
+                self.router.connecting_peers.lock().remove(&peer_addr);
+                return Err(e);
+            }
+        };
         let peer_ip = peer.ip();
 
         self.router.insert_connected_peer(peer, peer_addr);

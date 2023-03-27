@@ -78,16 +78,6 @@ pub struct Validator<N: Network, C: ConsensusStorage<N>> {
     dev: Option<u16>,
 }
 
-// Validator Quorum:
-//
-// Before starting consensus, we need to ensure that the validator mesh is full formed. In order to
-// do this, we need to:
-//
-// 1. Know the validator set (.committee.json)
-// 2. Verify all the connections are created on each node (send the authority pubkey in the
-//    handshake)
-// 3. Once the threshold is met, start consensus
-
 impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
     /// Initializes a new validator node.
     pub async fn new(
@@ -135,6 +125,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             shutdown: Default::default(),
             primary_keypair: primary_keypair.into(),
             committee,
+            // Note: starting the BFT is called from the handshake logic once quorum is reached.
             bft: Default::default(),
             dev,
         };
@@ -151,16 +142,12 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         // Initialize the signal handler.
         node.handle_signals();
 
-        // Initialise the inert BFT.
-        // node.initialize_inert_bft(dev).await?;
-
-        // TODO: trigger from router once quorum is reached.
-        // node.start_bft(dev).await?;
-
         // Return the node.
         Ok(node)
     }
 
+    // Reads the committee configuration and the primary's authority keypair. This is needed to
+    // establish quorum before the BFT process is started.
     fn read_committee(dev: Option<u16>) -> (BLS12381KeyPair, Committee) {
         // Prepare the path containing BFT consensus files.
         let bft_path =
@@ -207,6 +194,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         (primary_keypair, committee)
     }
 
+    /// Starts and sets the `RunningConsensusInstance`.
     pub async fn start_bft(&self) -> Result<()> {
         let dev = self.dev;
 
