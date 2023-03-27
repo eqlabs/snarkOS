@@ -113,6 +113,7 @@ impl<N: Network, C: ConsensusStorage<N>> ExecutionState for BftExecutionState<N,
             let mut num_valid_txs = 0;
             for id in &sorted_tx_ids {
                 let transaction = transactions.remove(id).unwrap(); // guaranteed to be there
+
                 // Skip invalid transactions.
                 if consensus.add_unconfirmed_transaction(transaction).is_ok() {
                     num_valid_txs += 1;
@@ -121,7 +122,7 @@ impl<N: Network, C: ConsensusStorage<N>> ExecutionState for BftExecutionState<N,
 
             // Return early if there are no valid transactions.
             if num_valid_txs == 0 {
-                debug!("No valid transactions in ConsensusOutput; not producing a block.");
+                warn!("💥💥💥 No valid transactions in ConsensusOutput; not producing a block.");
                 return Ok(None);
             }
 

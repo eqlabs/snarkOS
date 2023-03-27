@@ -34,7 +34,7 @@ use snarkos_node_tcp::{
     protocols::{Disconnect, Handshake, Reading, Writing},
     P2P,
 };
-use snarkvm::prelude::{Block, ConsensusStorage, Header, Network, ProverSolution};
+use snarkvm::prelude::{Block, ConsensusStorage, FromBytes, Header, Network, ProverSolution};
 
 use anyhow::Result;
 use fastcrypto::{bls12381::min_sig::BLS12381KeyPair, traits::KeyPair};
@@ -44,6 +44,7 @@ use parking_lot::RwLock;
 use rand::thread_rng;
 use std::{
     fs,
+    io::Read,
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -89,6 +90,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         cdn: Option<String>,
         dev: Option<u16>,
         enable_metrics: bool,
+        program_file: Option<String>,
     ) -> Result<Self> {
         // Initialize the ledger.
         let ledger = Ledger::load(genesis, dev)?;
@@ -103,6 +105,23 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         // Initialize the consensus.
         let consensus = Consensus::new(ledger.clone(), dev.is_some())?;
 
+        if let Some(0) = dev {
+            // first validator reads program block if requested
+            if let Some(filename) = program_file {
+                let mut file = std::fs::OpenOptions::new().read(true).open(filename).expect("failed to read file");
+                let mut len = [0u8; 8];
+                file.read_exact(&mut len)?;
+                let size = usize::from_le_bytes(len);
+                let mut bytes = vec![0u8; size];
+                file.read_exact(&mut bytes)?;
+                let block = Block::from_bytes_le(&bytes)?;
+                // Ensure the block is a valid next block.
+                consensus.check_next_block(&block)?;
+                // Construct a next block.
+                consensus.advance_to_next_block(&block)?;
+                info!("read program block from file");
+            }
+        }
         // Initialize the node router.
         let router = Router::new(
             node_ip,

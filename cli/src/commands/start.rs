@@ -25,7 +25,7 @@ use colored::Colorize;
 use core::str::FromStr;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use std::{net::SocketAddr, path::PathBuf};
+use std::{io::Read, net::SocketAddr, path::PathBuf};
 use tokio::runtime::{self, Runtime};
 
 /// The recommended minimum number of 'open files' limit for a beacon.
@@ -88,6 +88,11 @@ pub struct Start {
 
     #[clap(long = "metrics", action)]
     pub metrics: bool,
+
+    #[clap(long = "genesis")]
+    pub genesis_file: Option<String>,
+    #[clap(long = "program")]
+    pub program_file: Option<String>,
 }
 
 impl Start {
@@ -191,7 +196,18 @@ impl Start {
             // Initialize a new VM.
             let vm = VM::from(ConsensusStore::<N, ConsensusMemory<N>>::open(None)?)?;
             // Initialize the genesis block.
-            let genesis = Block::genesis(&vm, &beacon_private_key, &mut rng)?;
+            let genesis = if let Some(filename) = self.genesis_file.clone() {
+                let mut gen_file = std::fs::OpenOptions::new().read(true).open(filename)?;
+                let mut len = [0u8; 8];
+                gen_file.read_exact(&mut len)?;
+                let size = usize::from_le_bytes(len);
+                let mut bytes = vec![0u8; size];
+                gen_file.read_exact(&mut bytes)?;
+                println!("💾 loaded genesis block from file");
+                Block::from_bytes_le(&bytes)?
+            } else {
+                Block::genesis(&vm, &beacon_private_key, &mut rng)?
+            };
 
             // A helper method to set the account private key in the node type.
             let sample_account = |node: &mut Option<String>, is_beacon: bool| -> Result<()> {
@@ -300,7 +316,7 @@ impl Start {
         // Initialize the node.
         match node_type {
             NodeType::Beacon => Node::new_beacon(self.node, rest_ip, account, &trusted_peers, genesis, cdn, self.dev).await,
-            NodeType::Validator => Node::new_validator(self.node, rest_ip, account, &trusted_peers, genesis, cdn, self.dev, self.metrics).await,
+            NodeType::Validator => Node::new_validator(self.node, rest_ip, account, &trusted_peers, genesis, cdn, self.dev, self.metrics, self.program_file.clone()).await,
             NodeType::Prover => Node::new_prover(self.node, account, &trusted_peers, genesis, self.dev).await,
             NodeType::Client => Node::new_client(self.node, account, &trusted_peers, genesis, self.dev).await,
         }

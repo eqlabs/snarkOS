@@ -89,3 +89,6 @@ version = "0.2"
 [dev-dependencies.snarkos-node-bft-consensus]
 path = "../bft-consensus"
 features = ["test"]
+
+[dev-dependencies.rand_chacha]
+version= "0.3.1"

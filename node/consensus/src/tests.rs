@@ -14,9 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::atomic::AtomicU32, time::Duration};
 
 use crate::ConsensusMemory;
+use rand_chacha::ChaChaRng;
 use snarkos_account::Account;
 use snarkos_node::Validator;
 use snarkos_node_ledger::{Ledger, RecordsFilter};
@@ -37,9 +38,10 @@ use snarkvm::{
 };
 
 use indexmap::IndexMap;
-use narwhal_types::TransactionProto;
-use rand::prelude::IteratorRandom;
+use narwhal_types::{TransactionProto, TransactionsClient};
+use rand::{prelude::IteratorRandom, SeedableRng};
 use tokio::sync::mpsc;
+use tonic::transport::Channel;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_test::traced_test;
 
@@ -551,7 +553,7 @@ async fn test_bullshark_full() {
     // Start and collect the validator nodes.
     let mut validators = vec![];
     for (i, addr) in validator_addrs.iter().copied().enumerate() {
-        info!("Staring validator {i} at {addr}.");
+        info!("Starting validator {i} at {addr}.");
 
         let account = Account::<CurrentNetwork>::new(&mut rng).unwrap();
         let other_addrs = validator_addrs.iter().copied().filter(|&a| a != addr).collect::<Vec<_>>();
@@ -564,6 +566,7 @@ async fn test_bullshark_full() {
             None,
             Some(i as u16),
             i == 0, // enable metrics only for the first validator
+            None,
         )
         .await
         .unwrap();
@@ -726,4 +729,185 @@ function hello:
 
     // Wait indefinitely.
     std::future::pending::<()>().await;
+}
+
+#[tokio::test]
+#[ignore = "Run this manually to send messages to the snarkOS BFT."]
+#[traced_test]
+async fn pre_generate() {
+    const NUM: usize = 100;
+    let path = format!("/var/tmp/aleo-transactions-{NUM}.bin");
+    let mut file = std::fs::OpenOptions::new()
+            .create(true) // To create a new file
+            .truncate(true)
+            .write(true)
+            .open(path).unwrap();
+    let mut rng = ChaChaRng::seed_from_u64(1234567890u64);
+    // Initialize the beacon private key.
+    let genesis_private_key = PrivateKey::<CurrentNetwork>::new(&mut rng).unwrap();
+    let genesis_view_key = ViewKey::try_from(&genesis_private_key).unwrap();
+
+    // Initialize a new VM.
+    let vm = VM::from(ConsensusStore::<CurrentNetwork, ConsensusMemory<CurrentNetwork>>::open(None).unwrap()).unwrap();
+    // Initialize the genesis block.
+    let genesis = Block::genesis(&vm, &genesis_private_key, &mut rng).unwrap();
+
+    let gen_path = format!("/var/tmp/genesis-{NUM}.bin");
+    let mut gen_file = std::fs::OpenOptions::new()
+            .create(true) // To create a new file
+            .truncate(true)
+            .write(true)
+            .open(gen_path).unwrap();
+    let bytes = genesis.to_bytes_le().unwrap();
+    let len = bytes.len().to_le_bytes();
+    gen_file.write_all(&len).unwrap();
+    gen_file.write_all(&bytes).unwrap();
+    drop(gen_file);
+    info!("Preparing a block that will allow the production of transactions.");
+
+    // Initialize the consensus to generate transactions.
+    let ledger = test_helpers::CurrentLedger::load(genesis, None).unwrap();
+    let consensus = test_helpers::CurrentConsensus::new(ledger, true).unwrap();
+
+    // Initialize a new program. This program is a simple program with a function `test` that does not require any
+    // input records. This means you can sample as many execution transactions as you want without needing
+    // to locate any owned records to spend.
+    let program = Program::<CurrentNetwork>::from_str(
+        r"
+program simple.aleo;
+
+function hello:
+input r0 as u32.private;
+input r1 as u32.private;
+add r0 r1 into r2;
+output r2 as u32.private;
+",
+    )
+    .unwrap();
+
+    // Fetch the unspent records.
+    let records: Vec<_> = consensus
+        .ledger
+        .find_records(&genesis_view_key, RecordsFilter::Unspent)
+        .unwrap()
+        .filter(|(_, record)| !record.gates().is_zero())
+        .collect();
+    assert_eq!(records.len(), 1);
+
+    let fee = 600000;
+    let (_, record) = records.iter().find(|(_, r)| ***r.gates() >= fee).unwrap();
+
+    // Create a deployment transaction for the above program.
+    let deployment_transaction = Transaction::deploy(
+        consensus.ledger.vm(),
+        &genesis_private_key,
+        &program,
+        (record.clone(), fee),
+        None,
+        &mut rng,
+    )
+    .unwrap();
+    // Add the transaction to the memory pool.
+    consensus.add_unconfirmed_transaction(deployment_transaction).unwrap();
+    assert_eq!(consensus.memory_pool().num_unconfirmed_transactions(), 1);
+
+    // Propose the next block.
+    let next_block = consensus.propose_next_block(&genesis_private_key, &mut rng).unwrap();
+
+    // Ensure the block is a valid next block.
+    consensus.check_next_block(&next_block).unwrap();
+    // Construct a next block.
+    consensus.advance_to_next_block(&next_block).unwrap();
+
+    {
+        let dep_path = format!("/var/tmp/program-{NUM}.bin");
+        let mut dep_file = std::fs::OpenOptions::new()
+            .create(true) // To create a new file
+            .truncate(true)
+            .write(true)
+            .open(dep_path).unwrap();
+        let bytes: Vec<u8> = next_block.to_bytes_le().unwrap();
+        let len = bytes.len().to_le_bytes();
+        dep_file.write_all(&len).unwrap();
+        dep_file.write_all(bytes.as_slice()).unwrap();
+    }
+
+    // From this point on, once the deployment transaction has been included in a block,
+    // all executions of the `test` function in `sample.program` will be valid for any subsequent block.
+
+    let inputs = [Value::from_str("10u32").unwrap(), Value::from_str("100u32").unwrap()];
+    for i in 0..NUM {
+        let transaction = Transaction::execute(
+            consensus.ledger.vm(),
+            &genesis_private_key,
+            ProgramID::from_str("simple.aleo").unwrap(),
+            Identifier::from_str("hello").unwrap(),
+            inputs.iter(),
+            None,
+            None,
+            &mut rng,
+        )
+        .unwrap();
+
+        info!("Created transaction {} ({}/{}).", transaction.id(), i + 1, NUM);
+
+        let message = Message::UnconfirmedTransaction(UnconfirmedTransaction {
+            transaction_id: transaction.id(),
+            transaction: Data::Object(transaction),
+        });
+        let mut bytes: Vec<u8> = Vec::new();
+        message.serialize(&mut bytes).ok();
+        let len = bytes.len().to_le_bytes();
+        file.write_all(&len).unwrap();
+        file.write_all(bytes.as_slice()).unwrap();
+    }
+}
+
+#[tokio::test]
+#[ignore = "Run this manually to send messages to the snarkOS BFT."]
+#[traced_test]
+async fn read_pre_generated_transactions() {
+    const NUM: usize = 100;
+    let path = format!("/var/tmp/aleo-transactions-{NUM}.bin");
+    let mut file = std::fs::OpenOptions::new().read(true).open(path).expect("failed to read file");
+    let tx_uris = vec![
+        String::from("http://127.0.0.1:1360"),
+        String::from("http://127.0.0.1:1361"),
+        String::from("http://127.0.0.1:1362"),
+        String::from("http://127.0.0.1:1363"),
+    ];
+    let mut tx_clients: Vec<TransactionsClient<Channel>> = tx_uris
+        .into_iter()
+        .map(|uri| {
+            let channel = Channel::from_shared(uri).unwrap().connect_lazy();
+            TransactionsClient::new(channel)
+        })
+        .collect();
+    let length: usize = tx_clients.len();
+    let counter = AtomicU32::new(0);
+    loop {
+        let mut len = [0u8; 8];
+        let result = file.read_exact(&mut len);
+        if result.is_ok() {
+            let size = usize::from_le_bytes(len);
+            let mut bytes = vec![0u8; size];
+            file.read_exact(&mut bytes).expect("expected bytes available");
+            info!("read {size} bytes");
+            let payload = bytes::Bytes::from(bytes);
+            let tx = TransactionProto { transaction: payload };
+
+            let c = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let index = c as usize % length;
+            let tx_client = tx_clients.get_mut(index).unwrap();
+            let mut clone = tx_client.clone();
+            tokio::spawn(async move {
+                clone.submit_transaction(tx.clone()).await.unwrap();
+                info!("sent transaction {c}");
+            })
+            .await
+            .ok();
+        } else {
+            break;
+        }
+    }
 }
