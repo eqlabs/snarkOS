@@ -99,7 +99,7 @@ version = "0.7"
 features = [ "codec" ]
 
 [dependencies.tokio-stream]
-version = "=0.1"
+version = "0.1"
 
 [dependencies.tracing]
 version = "0.1"
