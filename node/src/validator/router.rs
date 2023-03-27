@@ -20,6 +20,7 @@ use snarkos_node_bft_consensus::sort_transactions;
 use snarkos_node_messages::{
     BlockRequest,
     BlockResponse,
+    ConsensusId,
     Data,
     DataBlocks,
     DisconnectReason,
@@ -28,7 +29,6 @@ use snarkos_node_messages::{
     NewBlock,
     Ping,
     Pong,
-    Quorum,
     UnconfirmedTransaction,
 };
 use snarkos_node_router::Peer;
@@ -125,24 +125,24 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             let public_key = self.primary_keypair.public();
             let signature = self.primary_keypair.sign(public_key.as_bytes());
 
-            let message = Message::Quorum(Box::new(Quorum { public_key: public_key.clone(), signature }));
+            let message = Message::ConsensusId(Box::new(ConsensusId { public_key: public_key.clone(), signature }));
             framed.send(message).await?;
 
             // 2.
-            let quorum = match framed.try_next().await? {
-                Some(Message::Quorum(data)) => data,
-                _ => return Err(error(format!("'{peer_addr}' did not send a quorum message"))),
+            let consensus_id = match framed.try_next().await? {
+                Some(Message::ConsensusId(data)) => data,
+                _ => return Err(error(format!("'{peer_addr}' did not send a 'ConsensusId' message"))),
             };
 
             // Check the advertised public key exists in the committee.
-            if !self.committee.keys().contains(&&quorum.public_key) {
+            if !self.committee.keys().contains(&&consensus_id.public_key) {
                 return Err(error(format!("'{peer_addr}' is not part of the committee")));
             }
 
             // Check the signature.
             // TODO: again, the signed message should probably be something we send to the peer, not
             // their public key.
-            if quorum.public_key.verify(quorum.public_key.as_bytes(), &quorum.signature).is_err() {
+            if consensus_id.public_key.verify(consensus_id.public_key.as_bytes(), &consensus_id.signature).is_err() {
                 return Err(error(format!("'{peer_addr}' couldn't verify their identity")));
             }
 
@@ -151,7 +151,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             // TODO: in future we could error here if it already exists in the collection but that
             // would require removing disconnected committee members. That logic is probably best
             // implemented when dynamic committees are being considered.
-            self.router.connected_committee_members.write().insert(quorum.public_key);
+            self.router.connected_committee_members.write().insert(consensus_id.public_key);
 
             // 4.
             // If quorum is reached, start the consensus but only if it hasn't already been started.

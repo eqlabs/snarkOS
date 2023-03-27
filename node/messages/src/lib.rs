@@ -43,6 +43,9 @@ pub use challenge_request::ChallengeRequest;
 mod challenge_response;
 pub use challenge_response::ChallengeResponse;
 
+mod consensus_id;
+pub use consensus_id::ConsensusId;
+
 mod disconnect;
 pub use disconnect::Disconnect;
 
@@ -66,9 +69,6 @@ pub use puzzle_request::PuzzleRequest;
 
 mod puzzle_response;
 pub use puzzle_response::PuzzleResponse;
-
-mod quorum;
-pub use quorum::Quorum;
 
 mod unconfirmed_solution;
 pub use unconfirmed_solution::UnconfirmedSolution;
@@ -131,7 +131,7 @@ pub enum Message<N: Network> {
     UnconfirmedSolution(UnconfirmedSolution<N>),
     UnconfirmedTransaction(UnconfirmedTransaction<N>),
     NewBlock(NewBlock<N>),
-    Quorum(Box<Quorum>),
+    ConsensusId(Box<ConsensusId>),
 }
 
 impl<N: Network> Message<N> {
@@ -159,7 +159,7 @@ impl<N: Network> Message<N> {
             Self::UnconfirmedSolution(message) => message.name(),
             Self::UnconfirmedTransaction(message) => message.name(),
             Self::NewBlock(message) => message.name(),
-            Self::Quorum(message) => message.name(),
+            Self::ConsensusId(message) => message.name(),
         }
     }
 
@@ -184,7 +184,7 @@ impl<N: Network> Message<N> {
             Self::UnconfirmedSolution(..) => 14,
             Self::UnconfirmedTransaction(..) => 15,
             Self::NewBlock(..) => 16,
-            Self::Quorum(..) => 17,
+            Self::ConsensusId(..) => 17,
         }
     }
 
@@ -211,7 +211,7 @@ impl<N: Network> Message<N> {
             Self::UnconfirmedSolution(message) => message.serialize(writer),
             Self::UnconfirmedTransaction(message) => message.serialize(writer),
             Self::NewBlock(message) => message.serialize(writer),
-            Self::Quorum(message) => message.serialize(writer),
+            Self::ConsensusId(message) => message.serialize(writer),
         }
     }
 
@@ -245,7 +245,7 @@ impl<N: Network> Message<N> {
             14 => Self::UnconfirmedSolution(MessageTrait::deserialize(bytes)?),
             15 => Self::UnconfirmedTransaction(MessageTrait::deserialize(bytes)?),
             16 => Self::NewBlock(MessageTrait::deserialize(bytes)?),
-            17 => Self::Quorum(MessageTrait::deserialize(bytes)?),
+            17 => Self::ConsensusId(MessageTrait::deserialize(bytes)?),
             _ => bail!("Unknown message ID {id}"),
         };
 

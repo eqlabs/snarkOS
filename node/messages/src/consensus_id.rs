@@ -18,14 +18,14 @@ use super::*;
 use fastcrypto::bls12381::min_sig::{BLS12381PublicKey, BLS12381Signature};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Quorum {
+pub struct ConsensusId {
     pub public_key: BLS12381PublicKey,
     pub signature: BLS12381Signature,
 }
 
-impl MessageTrait for Box<Quorum> {
+impl MessageTrait for Box<ConsensusId> {
     fn name(&self) -> String {
-        "Quorum".to_string()
+        "ConsensusId".to_string()
     }
 
     fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
@@ -35,6 +35,6 @@ impl MessageTrait for Box<Quorum> {
     fn deserialize(bytes: BytesMut) -> Result<Self> {
         let (public_key, signature) = bincode::deserialize_from(&mut bytes.reader())?;
 
-        Ok(Box::new(Quorum { public_key, signature }))
+        Ok(Box::new(ConsensusId { public_key, signature }))
     }
 }
