@@ -28,6 +28,7 @@ use narwhal_executor::ExecutionState;
 use narwhal_types::ConsensusOutput;
 use parking_lot::Mutex;
 use rand::prelude::{IteratorRandom, Rng, SliceRandom};
+use snarkos_node_bft_consensus::batched_transactions;
 use tempfile::TempDir;
 use tracing::*;
 
@@ -145,25 +146,21 @@ impl ExecutionState for TestBftExecutionState {
         let mut leader = consensus_output.sub_dag.leader.header.author.to_string();
         leader.truncate(8);
         let round = consensus_output.sub_dag.round();
-        let sdi = consensus_output.sub_dag.sub_dag_index;
-        let nb = consensus_output.sub_dag.num_batches();
 
-        info!("Consensus [leader: {leader}, round: {round}, sdi: {sdi}, num_batches: {nb}]:");
+        // Collect the batched transactions.
+        let mut transactions = Vec::new();
+        for transaction in batched_transactions(&consensus_output) {
+            let transaction: Transaction = bincode::deserialize(transaction).unwrap();
+            transactions.push(transaction);
+        }
+
+        info!("Consensus [leader: {leader}, round: {round}, txs: {}]", transactions.len());
 
         // Return early if there's no transactions.
         if consensus_output.batches.is_empty() {
             return;
         }
 
-        let mut transactions = Vec::new();
-        for batch in consensus_output.batches {
-            for batch in batch.1 {
-                for transaction in batch.transactions {
-                    let transaction: Transaction = bincode::deserialize(&transaction).unwrap();
-                    transactions.push(transaction);
-                }
-            }
-        }
         self.process_transactions(transactions);
     }
 
