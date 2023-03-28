@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{Peer, Router};
+use crate::{Outbound, Peer, Router};
 use snarkos_node_messages::{
     ChallengeRequest,
     ChallengeResponse,
@@ -25,7 +25,7 @@ use snarkos_node_messages::{
     MessageCodec,
     MessageTrait,
 };
-use snarkos_node_tcp::ConnectionSide;
+use snarkos_node_tcp::{protocols::Handshake, Connection, ConnectionSide};
 use snarkvm::prelude::{error, Address, Header, Network};
 
 use anyhow::{bail, Result};
@@ -36,11 +36,64 @@ use tokio::net::TcpStream;
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
 
+#[async_trait]
+pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
+    /* User implemented methods. */
+
+    fn genesis_header(&self) -> io::Result<Header<N>>;
+
+    async fn custom_handshake<'a>(
+        &'a self,
+        _conn_addr: SocketAddr,
+        peer: Peer<N>,
+        framed: Framed<&'a mut TcpStream, MessageCodec<N>>,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        Ok((peer, framed))
+    }
+
+    /* Provided implementations. */
+
+    async fn extended_handshake<'a>(
+        &'a self,
+        connection: &'a mut Connection,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        let conn_addr = connection.addr();
+        match self.extended_handshake_inner(connection).await {
+            // If the handshake is succesful, insert the peer and its connection address.
+            Ok((peer, framed)) => {
+                self.router().insert_connected_peer(peer.clone(), conn_addr);
+                Ok((peer, framed))
+            }
+
+            // If the handshake isn't succesful, clear the peer from the connecting collection.
+            Err(e) => {
+                self.router().connecting_peers.lock().remove(&conn_addr);
+                Err(e)
+            }
+        }
+    }
+
+    async fn extended_handshake_inner<'a>(
+        &'a self,
+        connection: &'a mut Connection,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        let conn_addr = connection.addr();
+        let conn_side = connection.side();
+        let stream = self.borrow_stream(connection);
+        let genesis_header = self.genesis_header()?;
+
+        let (peer, framed) = self.router().handshake(conn_addr, stream, conn_side, genesis_header).await?;
+        let (peer, framed) = self.custom_handshake(conn_addr, peer, framed).await?;
+
+        Ok((peer, framed))
+    }
+}
+
 impl<N: Network> Router<N> {
-    /// Performs the handshake protocol.
+    /// A helper that facilitates some extra error handling in `Router::handshake`.
     pub async fn handshake<'a>(
         &'a self,
-        peer_addr: SocketAddr,
+        conn_addr: SocketAddr,
         stream: &'a mut TcpStream,
         peer_side: ConnectionSide,
         genesis_header: Header<N>,
@@ -48,25 +101,12 @@ impl<N: Network> Router<N> {
         // If this is an inbound connection, we log it, but don't know the listening address yet.
         // Otherwise, we can immediately register the listening address.
         let mut peer_ip = if peer_side == ConnectionSide::Initiator {
-            debug!("Received a connection request from '{peer_addr}'");
+            debug!("Received a connection request from '{conn_addr}'");
             None
         } else {
-            Some(peer_addr)
+            Some(conn_addr)
         };
 
-        // Perform the handshake; we pass on a mutable reference to peer_ip in case the process is broken at any point in time.
-        self.handshake_inner(peer_addr, &mut peer_ip, stream, peer_side, genesis_header).await
-    }
-
-    /// A helper that facilitates some extra error handling in `Router::handshake`.
-    async fn handshake_inner<'a>(
-        &'a self,
-        peer_addr: SocketAddr,
-        peer_ip: &mut Option<SocketAddr>,
-        stream: &'a mut TcpStream,
-        peer_side: ConnectionSide,
-        genesis_header: Header<N>,
-    ) -> io::Result<(Peer<N>, Framed<&mut TcpStream, MessageCodec<N>>)> {
         // Construct the stream.
         let mut framed = Framed::new(stream, MessageCodec::<N>::default());
 
@@ -85,7 +125,7 @@ impl<N: Network> Router<N> {
             address: self.address(),
             nonce: nonce_a,
         });
-        trace!("Sending '{}-A' to '{peer_addr}'", message_a.name());
+        trace!("Sending '{}-A' to '{conn_addr}'", message_a.name());
         framed.send(message_a).await?;
 
         /* Step 2: Receive the challenge request. */
@@ -95,15 +135,15 @@ impl<N: Network> Router<N> {
             // Received the challenge request message, proceed.
             Some(Message::ChallengeRequest(data)) => data,
             // Received a disconnect message, abort.
-            Some(Message::Disconnect(reason)) => return Err(error(format!("'{peer_addr}' disconnected: {reason:?}"))),
+            Some(Message::Disconnect(reason)) => return Err(error(format!("'{conn_addr}' disconnected: {reason:?}"))),
             // Received an unexpected message, abort.
-            _ => return Err(error(format!("'{peer_addr}' did not send a challenge request"))),
+            _ => return Err(error(format!("'{conn_addr}' did not send a challenge request"))),
         };
-        trace!("Received '{}-B' from '{peer_addr}'", request_b.name());
+        trace!("Received '{}-B' from '{conn_addr}'", request_b.name());
 
         // Obtain the peer's listening address if it's an inbound connection.
         if peer_ip.is_none() {
-            *peer_ip = Some(SocketAddr::new(peer_addr.ip(), request_b.listener_port));
+            peer_ip = Some(SocketAddr::new(conn_addr.ip(), request_b.listener_port));
         }
 
         // This value is now guaranteed to be present, so it can be unwrapped.
@@ -117,10 +157,10 @@ impl<N: Network> Router<N> {
         }
 
         // Verify the challenge request. If a disconnect reason was returned, send the disconnect message and abort.
-        if let Some(reason) = self.verify_challenge_request(peer_addr, &request_b) {
-            trace!("Sending 'Disconnect' to '{peer_addr}'");
+        if let Some(reason) = self.verify_challenge_request(conn_addr, &request_b) {
+            trace!("Sending 'Disconnect' to '{conn_addr}'");
             framed.send(Message::Disconnect(Disconnect { reason: reason.clone() })).await?;
-            return Err(error(format!("Dropped '{peer_addr}' for reason: {reason:?}")));
+            return Err(error(format!("Dropped '{conn_addr}' for reason: {reason:?}")));
         }
 
         /* Step 3: Send the challenge response. */
@@ -129,12 +169,12 @@ impl<N: Network> Router<N> {
         let signature_b = self
             .account
             .sign_bytes(&request_b.nonce.to_le_bytes(), rng)
-            .map_err(|_| error(format!("Failed to sign the challenge request nonce from '{peer_addr}'")))?;
+            .map_err(|_| error(format!("Failed to sign the challenge request nonce from '{conn_addr}'")))?;
 
         // Send the challenge response.
         let message_b =
             Message::ChallengeResponse(ChallengeResponse { genesis_header, signature: Data::Object(signature_b) });
-        trace!("Sending '{}-B' to '{peer_addr}'", message_b.name());
+        trace!("Sending '{}-B' to '{conn_addr}'", message_b.name());
         framed.send(message_b).await?;
 
         /* Step 4: Receive the challenge response. */
@@ -144,19 +184,19 @@ impl<N: Network> Router<N> {
             // Received the challenge response message, proceed.
             Some(Message::ChallengeResponse(data)) => data,
             // Received a disconnect message, abort.
-            Some(Message::Disconnect(reason)) => return Err(error(format!("'{peer_addr}' disconnected: {reason:?}"))),
+            Some(Message::Disconnect(reason)) => return Err(error(format!("'{conn_addr}' disconnected: {reason:?}"))),
             // Received an unexpected message, abort.
-            _ => return Err(error(format!("'{peer_addr}' did not send a challenge response"))),
+            _ => return Err(error(format!("'{conn_addr}' did not send a challenge response"))),
         };
-        trace!("Received '{}-A' from '{peer_addr}'", response_a.name());
+        trace!("Received '{}-A' from '{conn_addr}'", response_a.name());
 
         // Verify the challenge response. If a disconnect reason was returned, send the disconnect message and abort.
         if let Some(reason) =
-            self.verify_challenge_response(peer_addr, request_b.address, response_a, genesis_header, nonce_a).await
+            self.verify_challenge_response(conn_addr, request_b.address, response_a, genesis_header, nonce_a).await
         {
-            trace!("Sending 'Disconnect' to '{peer_addr}'");
+            trace!("Sending 'Disconnect' to '{conn_addr}'");
             framed.send(Message::Disconnect(Disconnect { reason: reason.clone() })).await?;
-            return Err(error(format!("Dropped '{peer_addr}' for reason: {reason:?}")));
+            return Err(error(format!("Dropped '{conn_addr}' for reason: {reason:?}")));
         }
 
         /* Step 5: Construct the peer. */

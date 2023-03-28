@@ -31,7 +31,7 @@ use snarkos_node_messages::{
     Pong,
     UnconfirmedTransaction,
 };
-use snarkos_node_router::Peer;
+use snarkos_node_router::{ExtendedHandshake, Peer};
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{error, Network, Transaction};
 
@@ -54,61 +54,17 @@ impl<N: Network, C: ConsensusStorage<N>> P2P for Validator<N, C> {
 }
 
 #[async_trait]
-impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
-    /// Performs the handshake protocol.
-    async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
-        // Perform the handshake.
-        let peer_addr = connection.addr();
-        let conn_side = connection.side();
-        let stream = self.borrow_stream(&mut connection);
-        let genesis_header = self.ledger.get_header(0).map_err(|e| error(format!("{e}")))?;
-
-        let (peer, mut framed) = match self.handshake_inner(peer_addr, stream, conn_side, genesis_header).await {
-            Ok((peer, framed)) => (peer, framed),
-
-            // Handle any handshake related errors that have been bubbled up, update the connecting
-            // peer collections.
-            Err(e) => {
-                self.router.connecting_peers.lock().remove(&peer_addr);
-                return Err(e);
-            }
-        };
-        let peer_ip = peer.ip();
-
-        // Iff the handshake is succesful, update the peer connected collections and start ping
-        // loop.
-        self.router.insert_connected_peer(peer, peer_addr);
-
-        // Retrieve the block locators.
-        let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
-            Ok(block_locators) => Some(block_locators),
-            Err(e) => {
-                error!("Failed to get block locators: {e}");
-                return Err(error(format!("Failed to get block locators: {e}")));
-            }
-        };
-
-        // Send the first `Ping` message to the peer.
-        let message =
-            Message::Ping(Ping::<N> { version: Message::<N>::VERSION, node_type: self.node_type(), block_locators });
-        trace!("Sending '{}' to '{peer_ip}'", message.name());
-        framed.send(message).await?;
-
-        Ok(connection)
+impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C> {
+    fn genesis_header(&self) -> io::Result<Header<N>> {
+        self.ledger.get_header(0).map_err(|e| error(format!("{e}")))
     }
-}
 
-impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
-    async fn handshake_inner<'a>(
+    async fn custom_handshake<'a>(
         &'a self,
-        peer_addr: SocketAddr,
-        stream: &'a mut TcpStream,
-        peer_side: ConnectionSide,
-        genesis_header: Header<N>,
-    ) -> io::Result<(Peer<N>, Framed<&mut TcpStream, MessageCodec<N>>)> {
-        // Start with the general handshake logic from the router.
-        let (peer, mut framed) = self.router.handshake(peer_addr, stream, peer_side, genesis_header).await?;
-
+        conn_addr: SocketAddr,
+        peer: Peer<N>,
+        mut framed: Framed<&'a mut TcpStream, MessageCodec<N>>,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
         // Establish quorum with other validators:
         //
         // 1. Send sign and send pub key.
@@ -131,19 +87,19 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             // 2.
             let consensus_id = match framed.try_next().await? {
                 Some(Message::ConsensusId(data)) => data,
-                _ => return Err(error(format!("'{peer_addr}' did not send a 'ConsensusId' message"))),
+                _ => return Err(error(format!("'{conn_addr}' did not send a 'ConsensusId' message"))),
             };
 
             // Check the advertised public key exists in the committee.
             if !self.committee.keys().contains(&&consensus_id.public_key) {
-                return Err(error(format!("'{peer_addr}' is not part of the committee")));
+                return Err(error(format!("'{conn_addr}' is not part of the committee")));
             }
 
             // Check the signature.
             // TODO: again, the signed message should probably be something we send to the peer, not
             // their public key.
             if consensus_id.public_key.verify(consensus_id.public_key.as_bytes(), &consensus_id.signature).is_err() {
-                return Err(error(format!("'{peer_addr}' couldn't verify their identity")));
+                return Err(error(format!("'{conn_addr}' couldn't verify their identity")));
             }
 
             // 3.
@@ -163,6 +119,39 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         }
 
         Ok((peer, framed))
+    }
+}
+
+#[async_trait]
+impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C>
+where
+    Self: ExtendedHandshake<N>,
+{
+    /// Performs the handshake protocol.
+    async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
+        // Internally calls the shared router logic and custom implemented logic (see `ExtendedHandshake`).
+        let conn_addr = connection.addr();
+        let (_, mut framed) = self.extended_handshake(&mut connection).await?;
+
+        // TODO: perhaps this can be moved somewhere else in future? It is technically not part of
+        // the handshake.
+
+        // Retrieve the block locators.
+        let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
+            Ok(block_locators) => Some(block_locators),
+            Err(e) => {
+                error!("Failed to get block locators: {e}");
+                return Err(error(format!("Failed to get block locators: {e}")));
+            }
+        };
+
+        // Send the first `Ping` message to the peer.
+        let message =
+            Message::Ping(Ping::<N> { version: Message::<N>::VERSION, node_type: self.node_type(), block_locators });
+        trace!("Sending '{}' to '{conn_addr}'", message.name());
+        framed.send(message).await?;
+
+        Ok(connection)
     }
 }
 
