@@ -36,6 +36,9 @@ use tokio::net::TcpStream;
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
 
+/// A trait that enables wrapping custom handshake logic within the router logic.
+///
+/// This keeps peer collections nicely encapsulated with nicer error handling.
 #[async_trait]
 pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
     /* User implemented methods. */
@@ -102,7 +105,7 @@ pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
 }
 
 impl<N: Network> Router<N> {
-    /// A helper that facilitates some extra error handling in `Router::handshake`.
+    /// Implements the base handshake logic.
     pub async fn handshake<'a>(
         &'a self,
         conn_addr: SocketAddr,

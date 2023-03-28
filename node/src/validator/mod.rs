@@ -211,7 +211,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         let bft_execution_state = BftExecutionState::new(primary_pub, self.router.clone(), self.consensus.clone());
         let bft_tx_validator = TransactionValidator(self.consensus.clone());
         let inert_bft = InertConsensusInstance::load::<N, C>(bft_execution_state, bft_tx_validator, dev)?;
-        // SAFETY: must be some.
+        // SAFETY: must be present as the bft can only be started once quorum has been reached.
         let running_bft_consensus = inert_bft.start().await?;
 
         // Can't fail, but RunningConsensusInstance doesn't impl Debug, hence no unwrap.
