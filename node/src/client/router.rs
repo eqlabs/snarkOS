@@ -50,9 +50,7 @@ impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Client<N, C> {
 impl<N: Network, C: ConsensusStorage<N>> Handshake for Client<N, C> {
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
-        // Perform the handshake.
-        let conn_addr = connection.addr();
-        let (_, mut framed) = self.extended_handshake(&mut connection).await?;
+        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
 
         // Send the first `Ping` message to the peer.
         let message = Message::Ping(Ping::<N> {
@@ -60,7 +58,7 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Client<N, C> {
             node_type: self.node_type(),
             block_locators: None,
         });
-        trace!("Sending '{}' to '{conn_addr}'", message.name());
+        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
         framed.send(message).await?;
 
         Ok(connection)

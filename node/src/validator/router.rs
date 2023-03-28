@@ -130,8 +130,7 @@ where
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
         // Internally calls the shared router logic and custom implemented logic (see `ExtendedHandshake`).
-        let conn_addr = connection.addr();
-        let (_, mut framed) = self.extended_handshake(&mut connection).await?;
+        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
 
         // TODO: perhaps this can be moved somewhere else in future? It is technically not part of
         // the handshake.
@@ -148,7 +147,7 @@ where
         // Send the first `Ping` message to the peer.
         let message =
             Message::Ping(Ping::<N> { version: Message::<N>::VERSION, node_type: self.node_type(), block_locators });
-        trace!("Sending '{}' to '{conn_addr}'", message.name());
+        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
         framed.send(message).await?;
 
         Ok(connection)

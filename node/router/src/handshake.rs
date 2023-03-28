@@ -58,10 +58,22 @@ pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
         connection: &'a mut Connection,
     ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
         let conn_addr = connection.addr();
+        let conn_side = connection.side();
         match self.extended_handshake_inner(connection).await {
             // If the handshake is succesful, insert the peer and its connection address.
             Ok((peer, framed)) => {
                 self.router().insert_connected_peer(peer.clone(), conn_addr);
+
+                // Log the success.
+                let base_msg = format!("Successfully shook hands with peer '{}' (listening addr)", peer.ip());
+                match conn_side {
+                    // Peer is the initiator.
+                    ConnectionSide::Initiator => info!("{base_msg} on '{conn_addr}' (connection addr)",),
+
+                    // Peer is the responder.
+                    ConnectionSide::Responder => info!("{base_msg}"),
+                }
+
                 Ok((peer, framed))
             }
 
