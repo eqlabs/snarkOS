@@ -4905,6 +4905,7 @@ dependencies = [
  "rayon",
  "snarkos-account",
  "snarkos-node",
+ "snarkos-node-bft-consensus",
  "snarkos-node-ledger",
  "snarkos-node-messages",
  "snarkvm",
