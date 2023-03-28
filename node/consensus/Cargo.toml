@@ -84,3 +84,8 @@ version = "0.3"
 
 [dev-dependencies.tracing-test]
 version = "0.2"
+
+# a workaround to use the `test` feature in tests by default
+[dev-dependencies.snarkos-node-bft-consensus]
+path = "../bft-consensus"
+features = ["test"]
