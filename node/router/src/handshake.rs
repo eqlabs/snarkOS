@@ -45,7 +45,7 @@ pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
 
     fn genesis_header(&self) -> io::Result<Header<N>>;
 
-    async fn custom_handshake<'a>(
+    async fn handshake_extension<'a>(
         &'a self,
         _conn_addr: SocketAddr,
         peer: Peer<N>,
@@ -98,7 +98,7 @@ pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
         let genesis_header = self.genesis_header()?;
 
         let (peer, framed) = self.router().handshake(conn_addr, stream, conn_side, genesis_header).await?;
-        let (peer, framed) = self.custom_handshake(conn_addr, peer, framed).await?;
+        let (peer, framed) = self.handshake_extension(conn_addr, peer, framed).await?;
 
         Ok((peer, framed))
     }

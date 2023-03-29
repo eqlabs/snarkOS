@@ -59,7 +59,7 @@ impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C
         self.ledger.get_header(0).map_err(|e| error(format!("{e}")))
     }
 
-    async fn custom_handshake<'a>(
+    async fn handshake_extension<'a>(
         &'a self,
         conn_addr: SocketAddr,
         peer: Peer<N>,
