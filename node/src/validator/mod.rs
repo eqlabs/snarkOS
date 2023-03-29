@@ -177,8 +177,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             fs::copy(format!("{bft_path}/../.parameters.json"), format!("{bft_path}/.parameters.json")).unwrap();
         }
 
-        let base_path =
-            format!("{}/node/bft-consensus/committee/{}", workspace_dir(), if dev.is_some() { ".dev/" } else { "" });
+        let base_path = format!("{bft_path}{}", if dev.is_some() { "/" } else { "" });
         // If we're running dev mode, potentially use a different primary ID than 0.
         let primary_id = if let Some(dev_id) = dev { dev_id } else { 0 };
 
