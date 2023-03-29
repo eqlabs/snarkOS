@@ -49,7 +49,14 @@ use core::str::FromStr;
 use fastcrypto::bls12381::min_sig::BLS12381PublicKey;
 use indexmap::{IndexMap, IndexSet};
 use parking_lot::{Mutex, RwLock};
-use std::{collections::HashSet, future::Future, net::SocketAddr, ops::Deref, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+    net::SocketAddr,
+    ops::Deref,
+    sync::Arc,
+    time::Instant,
+};
 use tokio::task::JoinHandle;
 
 #[derive(Clone)]
@@ -80,7 +87,7 @@ pub struct InnerRouter<N: Network> {
     trusted_peers: IndexSet<SocketAddr>,
     /// The set of connected committee members by public key, no mapping is required currently but
     /// it will likely be necessary when handling dynamic committees).
-    pub connected_committee_members: RwLock<HashSet<BLS12381PublicKey>>,
+    pub connected_committee_members: RwLock<HashMap<SocketAddr, BLS12381PublicKey>>,
     /// The map of connected peer IPs to their peer handlers.
     connected_peers: RwLock<IndexMap<SocketAddr, Peer<N>>>,
     /// The set of handshaking peers. While `Tcp` already recognizes the connecting IP addresses

@@ -107,14 +107,13 @@ impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C
         // 3.
         // Track the committee member.
         // TODO: in future we could error here if it already exists in the collection but that
-        // would require removing disconnected committee members. That logic is probably best
-        // implemented when dynamic committees are being considered.
-        self.router.connected_committee_members.write().insert(consensus_id.public_key);
+        // logic is probably best implemented when dynamic committees are being considered.
+        self.router.connected_committee_members.write().insert(peer.ip(), consensus_id.public_key);
 
         // 4.
         // If quorum is reached, start the consensus but only if it hasn't already been started.
         let connected_stake =
-            self.router.connected_committee_members.read().iter().map(|pk| self.committee.stake(pk)).sum::<u64>();
+            self.router.connected_committee_members.read().values().map(|pk| self.committee.stake(pk)).sum::<u64>();
         if connected_stake >= self.committee.quorum_threshold() && self.bft.get().is_none() {
             self.start_bft().await.unwrap()
         }
@@ -161,6 +160,7 @@ impl<N: Network, C: ConsensusStorage<N>> Disconnect for Validator<N, C> {
     async fn handle_disconnect(&self, peer_addr: SocketAddr) {
         if let Some(peer_ip) = self.router.resolve_to_listener(&peer_addr) {
             self.router.remove_connected_peer(peer_ip);
+            self.router.connected_committee_members.write().remove(&peer_ip);
         }
     }
 }
