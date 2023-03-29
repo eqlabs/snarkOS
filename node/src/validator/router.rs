@@ -61,7 +61,7 @@ impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C
 
     async fn handshake_extension<'a>(
         &'a self,
-        conn_addr: SocketAddr,
+        peer_addr: SocketAddr,
         peer: Peer<N>,
         mut framed: Framed<&'a mut TcpStream, MessageCodec<N>>,
     ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
@@ -89,19 +89,19 @@ impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C
         // 2.
         let consensus_id = match framed.try_next().await? {
             Some(Message::ConsensusId(data)) => data,
-            _ => return Err(error(format!("'{conn_addr}' did not send a 'ConsensusId' message"))),
+            _ => return Err(error(format!("'{peer_addr}' did not send a 'ConsensusId' message"))),
         };
 
         // Check the advertised public key exists in the committee.
         if !self.committee.keys().contains(&&consensus_id.public_key) {
-            return Err(error(format!("'{conn_addr}' is not part of the committee")));
+            return Err(error(format!("'{peer_addr}' is not part of the committee")));
         }
 
         // Check the signature.
         // TODO: again, the signed message should probably be something we send to the peer, not
         // their public key.
         if consensus_id.public_key.verify(consensus_id.public_key.as_bytes(), &consensus_id.signature).is_err() {
-            return Err(error(format!("'{conn_addr}' couldn't verify their identity")));
+            return Err(error(format!("'{peer_addr}' couldn't verify their identity")));
         }
 
         // 3.
