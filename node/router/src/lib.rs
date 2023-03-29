@@ -438,12 +438,12 @@ impl<N: Network> Router<N> {
         self.resolver.insert_peer(peer.ip(), peer_addr);
         // Add an entry for this `Peer` in the connected peers.
         self.connected_peers.write().insert(peer.ip(), peer.clone());
+        // Remove this peer from the connecting peers, if it exists.
+        self.connecting_peers.lock().remove(&peer.ip());
         // Remove this peer from the candidate peers, if it exists.
         self.candidate_peers.write().remove(&peer.ip());
         // Remove this peer from the restricted peers, if it exists.
         self.restricted_peers.write().remove(&peer.ip());
-        // Remove this peer from the connecting peers, if it exists.
-        self.connecting_peers.lock().remove(&peer.ip());
     }
 
     /// Inserts the given peer IPs to the set of candidate peers.

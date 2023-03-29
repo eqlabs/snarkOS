@@ -56,7 +56,7 @@ impl<N: Network, C: ConsensusStorage<N>> P2P for Validator<N, C> {
 #[async_trait]
 impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C> {
     fn genesis_header(&self) -> io::Result<Header<N>> {
-        self.ledger.get_header(0).map_err(|e| error(format!("{e}")))
+        self.ledger.get_header(0).map_err(|e| error(e.to_string()))
     }
 
     async fn handshake_extension<'a>(
@@ -65,57 +65,58 @@ impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C
         peer: Peer<N>,
         mut framed: Framed<&'a mut TcpStream, MessageCodec<N>>,
     ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        if peer.node_type() != NodeType::Validator {
+            return Ok((peer, framed));
+        }
+
         // Establish quorum with other validators:
         //
-        // 1. Send sign and send pub key.
+        // 1. Sign and send the node's pub key.
         // 2. Receive and verify peer's signed pub key.
         // 3. Insert into connected_committee_members.
         // 4. If quorum threshold is reached, start the bft.
 
-        // This will only be present if the consensus hasn't been started yet.
-        if peer.node_type() == NodeType::Validator {
-            // 1.
-            // BFT must be set here.
-            // TODO: we should probably use something else than the public key, potentially interactive, since this could
-            // be copied and reused by a malicious validator.
-            let public_key = self.primary_keypair.public();
-            let signature = self.primary_keypair.sign(public_key.as_bytes());
+        // 1.
+        // BFT must be set here.
+        // TODO: we should probably use something else than the public key, potentially interactive, since this could
+        // be copied and reused by a malicious validator.
+        let public_key = self.primary_keypair.public();
+        let signature = self.primary_keypair.sign(public_key.as_bytes());
 
-            let message = Message::ConsensusId(Box::new(ConsensusId { public_key: public_key.clone(), signature }));
-            framed.send(message).await?;
+        let message = Message::ConsensusId(Box::new(ConsensusId { public_key: public_key.clone(), signature }));
+        framed.send(message).await?;
 
-            // 2.
-            let consensus_id = match framed.try_next().await? {
-                Some(Message::ConsensusId(data)) => data,
-                _ => return Err(error(format!("'{conn_addr}' did not send a 'ConsensusId' message"))),
-            };
+        // 2.
+        let consensus_id = match framed.try_next().await? {
+            Some(Message::ConsensusId(data)) => data,
+            _ => return Err(error(format!("'{conn_addr}' did not send a 'ConsensusId' message"))),
+        };
 
-            // Check the advertised public key exists in the committee.
-            if !self.committee.keys().contains(&&consensus_id.public_key) {
-                return Err(error(format!("'{conn_addr}' is not part of the committee")));
-            }
+        // Check the advertised public key exists in the committee.
+        if !self.committee.keys().contains(&&consensus_id.public_key) {
+            return Err(error(format!("'{conn_addr}' is not part of the committee")));
+        }
 
-            // Check the signature.
-            // TODO: again, the signed message should probably be something we send to the peer, not
-            // their public key.
-            if consensus_id.public_key.verify(consensus_id.public_key.as_bytes(), &consensus_id.signature).is_err() {
-                return Err(error(format!("'{conn_addr}' couldn't verify their identity")));
-            }
+        // Check the signature.
+        // TODO: again, the signed message should probably be something we send to the peer, not
+        // their public key.
+        if consensus_id.public_key.verify(consensus_id.public_key.as_bytes(), &consensus_id.signature).is_err() {
+            return Err(error(format!("'{conn_addr}' couldn't verify their identity")));
+        }
 
-            // 3.
-            // Track the committee member.
-            // TODO: in future we could error here if it already exists in the collection but that
-            // would require removing disconnected committee members. That logic is probably best
-            // implemented when dynamic committees are being considered.
-            self.router.connected_committee_members.write().insert(consensus_id.public_key);
+        // 3.
+        // Track the committee member.
+        // TODO: in future we could error here if it already exists in the collection but that
+        // would require removing disconnected committee members. That logic is probably best
+        // implemented when dynamic committees are being considered.
+        self.router.connected_committee_members.write().insert(consensus_id.public_key);
 
-            // 4.
-            // If quorum is reached, start the consensus but only if it hasn't already been started.
-            let connected_stake =
-                self.router.connected_committee_members.read().iter().map(|pk| self.committee.stake(pk)).sum::<u64>();
-            if connected_stake >= self.committee.quorum_threshold() && self.bft.get().is_none() {
-                self.start_bft().await.unwrap()
-            }
+        // 4.
+        // If quorum is reached, start the consensus but only if it hasn't already been started.
+        let connected_stake =
+            self.router.connected_committee_members.read().iter().map(|pk| self.committee.stake(pk)).sum::<u64>();
+        if connected_stake >= self.committee.quorum_threshold() && self.bft.get().is_none() {
+            self.start_bft().await.unwrap()
         }
 
         Ok((peer, framed))

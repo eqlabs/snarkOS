@@ -44,7 +44,7 @@ impl<N: Network, C: ConsensusStorage<N>> P2P for Beacon<N, C> {
 #[async_trait]
 impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Beacon<N, C> {
     fn genesis_header(&self) -> io::Result<Header<N>> {
-        self.ledger.get_header(0).map_err(|e| error(format!("{e}")))
+        self.ledger.get_header(0).map_err(|e| error(e.to_string()))
     }
 }
 
