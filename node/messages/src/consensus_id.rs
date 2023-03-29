@@ -15,7 +15,10 @@
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
 use super::*;
-use fastcrypto::bls12381::min_sig::{BLS12381PublicKey, BLS12381Signature};
+use fastcrypto::{
+    bls12381::min_sig::{BLS12381PublicKey, BLS12381Signature},
+    traits::ToFromBytes,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConsensusId {
@@ -29,7 +32,10 @@ impl MessageTrait for Box<ConsensusId> {
     }
 
     fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
-        Ok(bincode::serialize_into(writer, &(self.public_key.clone(), self.signature.clone()))?)
+        writer.write_all(self.public_key.as_bytes())?;
+        writer.write_all(self.signature.as_bytes())?;
+
+        Ok(())
     }
 
     fn deserialize(bytes: BytesMut) -> Result<Self> {
