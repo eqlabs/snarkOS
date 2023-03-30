@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::{Peer, Router};
+use crate::{Outbound, Peer, Router};
 use snarkos_node_messages::{
     ChallengeRequest,
     ChallengeResponse,
@@ -25,7 +25,7 @@ use snarkos_node_messages::{
     MessageCodec,
     MessageTrait,
 };
-use snarkos_node_tcp::ConnectionSide;
+use snarkos_node_tcp::{protocols::Handshake, Connection, ConnectionSide};
 use snarkvm::prelude::{error, Address, Header, Network};
 
 use anyhow::{bail, Result};
@@ -36,15 +36,83 @@ use tokio::net::TcpStream;
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
 
+/// A trait that enables wrapping custom handshake logic within the router logic.
+///
+/// This keeps peer collections nicely encapsulated with nicer error handling.
+#[async_trait]
+pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
+    /* User implemented methods. */
+
+    fn genesis_header(&self) -> io::Result<Header<N>>;
+
+    async fn handshake_extension<'a>(
+        &'a self,
+        _peer_addr: SocketAddr,
+        peer: Peer<N>,
+        framed: Framed<&'a mut TcpStream, MessageCodec<N>>,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        Ok((peer, framed))
+    }
+
+    /* Provided implementations. */
+
+    async fn extended_handshake<'a>(
+        &'a self,
+        connection: &'a mut Connection,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        let peer_addr = connection.addr();
+        let conn_side = connection.side();
+        match self.extended_handshake_inner(connection).await {
+            // If the handshake is succesful, insert the peer and its connection address.
+            Ok((peer, framed)) => {
+                self.router().insert_connected_peer(peer.clone(), peer_addr);
+
+                // Log the success.
+                let base_msg = format!("Successfully shook hands with peer '{}' (listening addr)", peer.ip());
+                match conn_side {
+                    // Peer is the initiator.
+                    ConnectionSide::Initiator => info!("{base_msg} on '{peer_addr}' (connection addr)",),
+
+                    // Peer is the responder.
+                    ConnectionSide::Responder => info!("{base_msg}"),
+                }
+
+                Ok((peer, framed))
+            }
+
+            // If the handshake isn't succesful, clear the peer from the connecting collection.
+            Err(e) => {
+                self.router().connecting_peers.lock().remove(&peer_addr);
+                Err(e)
+            }
+        }
+    }
+
+    async fn extended_handshake_inner<'a>(
+        &'a self,
+        connection: &'a mut Connection,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        let peer_addr = connection.addr();
+        let conn_side = connection.side();
+        let stream = self.borrow_stream(connection);
+        let genesis_header = self.genesis_header()?;
+
+        let (peer, framed) = self.router().handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, framed) = self.handshake_extension(peer_addr, peer, framed).await?;
+
+        Ok((peer, framed))
+    }
+}
+
 impl<N: Network> Router<N> {
-    /// Performs the handshake protocol.
+    /// Implements the base handshake logic.
     pub async fn handshake<'a>(
         &'a self,
         peer_addr: SocketAddr,
         stream: &'a mut TcpStream,
         peer_side: ConnectionSide,
         genesis_header: Header<N>,
-    ) -> io::Result<(SocketAddr, Framed<&mut TcpStream, MessageCodec<N>>)> {
+    ) -> io::Result<(Peer<N>, Framed<&mut TcpStream, MessageCodec<N>>)> {
         // If this is an inbound connection, we log it, but don't know the listening address yet.
         // Otherwise, we can immediately register the listening address.
         let mut peer_ip = if peer_side == ConnectionSide::Initiator {
@@ -54,26 +122,6 @@ impl<N: Network> Router<N> {
             Some(peer_addr)
         };
 
-        // Perform the handshake; we pass on a mutable reference to peer_ip in case the process is broken at any point in time.
-        let handshake_result = self.handshake_inner(peer_addr, &mut peer_ip, stream, peer_side, genesis_header).await;
-
-        // Remove the address from the collection of connecting peers (if the handshake got to the point where it's known).
-        if let Some(ip) = peer_ip {
-            self.connecting_peers.lock().remove(&ip);
-        }
-
-        handshake_result
-    }
-
-    /// A helper that facilitates some extra error handling in `Router::handshake`.
-    async fn handshake_inner<'a>(
-        &'a self,
-        peer_addr: SocketAddr,
-        peer_ip: &mut Option<SocketAddr>,
-        stream: &'a mut TcpStream,
-        peer_side: ConnectionSide,
-        genesis_header: Header<N>,
-    ) -> io::Result<(SocketAddr, Framed<&mut TcpStream, MessageCodec<N>>)> {
         // Construct the stream.
         let mut framed = Framed::new(stream, MessageCodec::<N>::default());
 
@@ -110,7 +158,7 @@ impl<N: Network> Router<N> {
 
         // Obtain the peer's listening address if it's an inbound connection.
         if peer_ip.is_none() {
-            *peer_ip = Some(SocketAddr::new(peer_addr.ip(), request_b.listener_port));
+            peer_ip = Some(SocketAddr::new(peer_addr.ip(), request_b.listener_port));
         }
 
         // This value is now guaranteed to be present, so it can be unwrapped.
@@ -166,20 +214,19 @@ impl<N: Network> Router<N> {
             return Err(error(format!("Dropped '{peer_addr}' for reason: {reason:?}")));
         }
 
-        /* Step 5: Add the peer to the router. */
+        /* Step 5: Construct the peer. */
 
-        // Prepare the peer.
+        // Note: adding the peer to the router will need to be done from the node-specific
+        // handshake implementations for now.
+
+        // Construct the peer.
         let peer_address = request_b.address;
         let peer_type = request_b.node_type;
         let peer_version = request_b.version;
 
-        // Construct the peer.
         let peer = Peer::new(peer_ip, peer_address, peer_type, peer_version);
-        // Insert the connected peer in the router.
-        self.insert_connected_peer(peer, peer_addr);
-        info!("Connected to '{peer_ip}'");
 
-        Ok((peer_ip, framed))
+        Ok((peer, framed))
     }
 
     /// Ensure the peer is allowed to connect.

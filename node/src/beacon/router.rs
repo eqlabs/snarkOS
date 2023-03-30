@@ -27,7 +27,7 @@ use snarkos_node_messages::{
     Ping,
     Pong,
 };
-use snarkos_node_router::Routing;
+use snarkos_node_router::{ExtendedHandshake, Routing};
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{error, Header};
 
@@ -42,15 +42,17 @@ impl<N: Network, C: ConsensusStorage<N>> P2P for Beacon<N, C> {
 }
 
 #[async_trait]
+impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Beacon<N, C> {
+    fn genesis_header(&self) -> io::Result<Header<N>> {
+        self.ledger.get_header(0).map_err(|e| error(e.to_string()))
+    }
+}
+
+#[async_trait]
 impl<N: Network, C: ConsensusStorage<N>> Handshake for Beacon<N, C> {
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
-        // Perform the handshake.
-        let peer_addr = connection.addr();
-        let conn_side = connection.side();
-        let stream = self.borrow_stream(&mut connection);
-        let genesis_header = self.ledger.get_header(0).map_err(|e| error(format!("{e}")))?;
-        let (peer_ip, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
 
         // Retrieve the block locators.
         let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
@@ -64,7 +66,7 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Beacon<N, C> {
         // Send the first `Ping` message to the peer.
         let message =
             Message::Ping(Ping::<N> { version: Message::<N>::VERSION, node_type: self.node_type(), block_locators });
-        trace!("Sending '{}' to '{peer_ip}'", message.name());
+        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
         framed.send(message).await?;
 
         Ok(connection)

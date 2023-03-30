@@ -25,7 +25,7 @@ use snarkos_node_messages::{
     Pong,
     UnconfirmedTransaction,
 };
-use snarkos_node_router::Routing;
+use snarkos_node_router::{ExtendedHandshake, Routing};
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{Network, Transaction};
 
@@ -40,15 +40,17 @@ impl<N: Network, C: ConsensusStorage<N>> P2P for Client<N, C> {
 }
 
 #[async_trait]
+impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Client<N, C> {
+    fn genesis_header(&self) -> io::Result<Header<N>> {
+        Ok(*self.genesis.header())
+    }
+}
+
+#[async_trait]
 impl<N: Network, C: ConsensusStorage<N>> Handshake for Client<N, C> {
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
-        // Perform the handshake.
-        let peer_addr = connection.addr();
-        let conn_side = connection.side();
-        let stream = self.borrow_stream(&mut connection);
-        let genesis_header = *self.genesis.header();
-        let (peer_ip, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
 
         // Send the first `Ping` message to the peer.
         let message = Message::Ping(Ping::<N> {
@@ -56,7 +58,7 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Client<N, C> {
             node_type: self.node_type(),
             block_locators: None,
         });
-        trace!("Sending '{}' to '{peer_ip}'", message.name());
+        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
         framed.send(message).await?;
 
         Ok(connection)

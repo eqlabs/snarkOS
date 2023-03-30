@@ -15,7 +15,8 @@
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
 use snarkos_account::Account;
-use snarkos_node_messages::{ChallengeRequest, ChallengeResponse, Data, Message, MessageCodec, NodeType};
+use snarkos_node_bft_consensus::setup::{read_authority_keypair_from_file, workspace_dir};
+use snarkos_node_messages::{ChallengeRequest, ChallengeResponse, ConsensusId, Data, Message, MessageCodec, NodeType};
 use snarkvm::prelude::{error, Address, Block, FromBytes, Network, TestRng, Testnet3 as CurrentNetwork};
 
 use std::{
@@ -24,6 +25,10 @@ use std::{
     str::FromStr,
 };
 
+use fastcrypto::{
+    traits::{KeyPair, Signer, ToFromBytes},
+    Verifier,
+};
 use futures_util::{sink::SinkExt, TryStreamExt};
 use pea2pea::{
     protocols::{Disconnect, Handshake, Reading, Writing},
@@ -160,6 +165,33 @@ impl Handshake for TestPeer {
         };
 
         assert_eq!(challenge_response.genesis_header, genesis_header);
+
+        if request_b.node_type != NodeType::Validator || self.node_type != NodeType::Validator {
+            return Ok(conn);
+        }
+
+        // Use the second committee member's credentials for testing.
+        // TODO: make committee configuration more ergonomic for testing.
+        let bft_path = format!("{}/node/bft-consensus/committee/.dev", workspace_dir());
+
+        let primary_id = 1;
+        let key_file = format!("{bft_path}/.primary-{primary_id}-key.json");
+        let kp = read_authority_keypair_from_file(key_file).unwrap();
+
+        let public_key = kp.public();
+        let signature = kp.sign(public_key.as_bytes());
+
+        let message = Message::ConsensusId(Box::new(ConsensusId { public_key: public_key.clone(), signature }));
+        framed.send(message).await?;
+
+        let Message::ConsensusId(consensus_id) = framed.try_next().await.unwrap().unwrap() else {
+            panic!("didn't get consensus id")
+        };
+
+        // Check the signature.
+        if consensus_id.public_key.verify(consensus_id.public_key.as_bytes(), &consensus_id.signature).is_err() {
+            panic!("signature doesn't verify")
+        }
 
         Ok(conn)
     }
