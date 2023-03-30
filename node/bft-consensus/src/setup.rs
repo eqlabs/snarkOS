@@ -21,6 +21,7 @@ use std::{
     sync::atomic::Ordering,
 };
 
+#[cfg(not(feature = "test"))]
 use aleo_std::aleo_dir;
 use anyhow::anyhow;
 use fastcrypto::{
@@ -244,6 +245,7 @@ impl CommitteeSetup {
 }
 
 // Returns the base path for the BFT storage files.
+#[cfg(not(feature = "test"))]
 fn base_storage_path(dev: Option<u16>) -> PathBuf {
     // Retrieve the starting directory.
     match dev.is_some() {
@@ -252,6 +254,15 @@ fn base_storage_path(dev: Option<u16>) -> PathBuf {
         // In production mode, the ledger is stored in the `~/.aleo/` directory.
         false => aleo_dir(),
     }
+}
+
+// Returns the base path for the BFT storage files.
+#[cfg(feature = "test")]
+fn base_storage_path(_dev: Option<u16>) -> PathBuf {
+    // The call to `into_path` causes the directory to not be deleted afterwards,
+    // but it resides in the system's temporary file directory, so it gets removed
+    // soon regardless.
+    tempfile::TempDir::new().unwrap().into_path()
 }
 
 // Returns the path for the primary-related BFT files.

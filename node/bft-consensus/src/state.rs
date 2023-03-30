@@ -14,7 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with the snarkOS library. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use anyhow::bail;
 use async_trait::async_trait;
@@ -84,26 +87,22 @@ impl<N: Network, C: ConsensusStorage<N>> ExecutionState for BftExecutionState<N,
         let next_block = tokio::task::spawn_blocking(move || {
             // Collect all the transactions contained in the agreed upon batches.
             let mut transactions = HashMap::new();
-            for batch in consensus_output.batches {
-                for batch in batch.1 {
-                    for transaction in batch.transactions {
-                        let bytes = BytesMut::from(&transaction[..]);
-                        // TransactionValidator ensures that the Message can be deserialized.
-                        let message = Message::<N>::deserialize(bytes).unwrap();
+            for transaction in batched_transactions(&consensus_output) {
+                let bytes = BytesMut::from(&transaction[..]);
+                // TransactionValidator ensures that the Message can be deserialized.
+                let message = Message::<N>::deserialize(bytes).unwrap();
 
-                        let unconfirmed_tx = if let Message::UnconfirmedTransaction(tx) = message {
-                            tx
-                        } else {
-                            // TransactionValidator ensures that the Message is an UnconfirmedTransaction.
-                            unreachable!();
-                        };
+                let unconfirmed_tx = if let Message::UnconfirmedTransaction(tx) = message {
+                    tx
+                } else {
+                    // TransactionValidator ensures that the Message is an UnconfirmedTransaction.
+                    unreachable!();
+                };
 
-                        // TransactionValidator ensures that the Message can be deserialized.
-                        let tx = unconfirmed_tx.transaction.deserialize_blocking().unwrap();
+                // TransactionValidator ensures that the Message can be deserialized.
+                let tx = unconfirmed_tx.transaction.deserialize_blocking().unwrap();
 
-                        transactions.insert(tx.id(), tx);
-                    }
-                }
+                transactions.insert(tx.id(), tx);
             }
 
             // Sort the transactions by ID according to shared logic.
@@ -202,4 +201,14 @@ impl<N: Network, C: ConsensusStorage<N>> ExecutionState for BftExecutionState<N,
 pub fn sort_transactions<N: Network>(transaction_ids: &mut [N::TransactionID]) {
     // TODO: possibly sort using a more elaborate logic
     transaction_ids.sort_by_key(|id| id.to_string());
+}
+
+// Return an iterator over deduplicated transactions agreed upon by the consensus.
+pub fn batched_transactions(consensus_output: &ConsensusOutput) -> impl Iterator<Item = &Vec<u8>> {
+    let deduplicated_txs = consensus_output
+        .batches
+        .iter()
+        .flat_map(|batches| batches.1.iter().flat_map(|batch| batch.transactions.iter()))
+        .collect::<HashSet<_>>();
+    deduplicated_txs.into_iter()
 }

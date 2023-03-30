@@ -16,7 +16,7 @@
 
 use super::*;
 
-use snarkos_node_bft_consensus::sort_transactions;
+use snarkos_node_bft_consensus::{batched_transactions, sort_transactions};
 use snarkos_node_messages::{
     BlockRequest,
     BlockResponse,
@@ -261,10 +261,7 @@ impl<N: Network, C: ConsensusStorage<N>> Inbound<N> for Validator<N, C> {
 
         // If the previous consensus output is available, check the order of transactions.
         if let Some(last_consensus_output) = self.bft().state.last_output.lock().clone() {
-            let mut expected_txs = last_consensus_output
-                .batches
-                .iter()
-                .flat_map(|batches| batches.1.iter().flat_map(|batch| &batch.transactions))
+            let mut expected_txs = batched_transactions(&last_consensus_output)
                 .map(|bytes| {
                     // Safe; it's our own consensus output, so we already processed this tx with the TransactionValidator.
                     // Also, it's fast to deserialize, because we only process the ID and keep the actual tx as a blob.
