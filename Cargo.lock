@@ -2783,7 +2783,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 [[package]]
 name = "mysten-network"
 version = "0.2.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "bincode 1.3.3",
  "bytes",
@@ -2804,7 +2804,7 @@ dependencies = [
 [[package]]
 name = "mysten-util-mem"
 version = "0.11.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "cfg-if",
  "ed25519-consensus",
@@ -2822,7 +2822,7 @@ dependencies = [
 [[package]]
 name = "mysten-util-mem-derive"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "proc-macro2 1.0.54",
  "syn 1.0.109",
@@ -2832,7 +2832,7 @@ dependencies = [
 [[package]]
 name = "narwhal-config"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "arc-swap",
  "fastcrypto",
@@ -2850,7 +2850,7 @@ dependencies = [
 [[package]]
 name = "narwhal-consensus"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "arc-swap",
  "bincode 1.3.3",
@@ -2867,7 +2867,7 @@ dependencies = [
  "narwhal-types",
  "rand",
  "serde",
- "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3_rebased_metrics)",
+ "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3)",
  "thiserror",
  "tokio",
  "tracing",
@@ -2877,7 +2877,7 @@ dependencies = [
 [[package]]
 name = "narwhal-crypto"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "eyre",
  "fastcrypto",
@@ -2895,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "narwhal-dag"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "arc-swap",
  "dashmap",
@@ -2912,7 +2912,7 @@ dependencies = [
 [[package]]
 name = "narwhal-executor"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -2937,7 +2937,7 @@ dependencies = [
  "narwhal-types",
  "rand",
  "serde",
- "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3_rebased_metrics)",
+ "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3)",
  "tap",
  "thiserror",
  "tokio",
@@ -2950,7 +2950,7 @@ dependencies = [
 [[package]]
 name = "narwhal-network"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -2970,7 +2970,7 @@ dependencies = [
  "narwhal-types",
  "rand",
  "serde",
- "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3_rebased_metrics)",
+ "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3)",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -2982,7 +2982,7 @@ dependencies = [
 [[package]]
 name = "narwhal-node"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "anemo",
  "anyhow",
@@ -3032,7 +3032,7 @@ dependencies = [
 [[package]]
 name = "narwhal-primary"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -3064,7 +3064,7 @@ dependencies = [
  "rand",
  "roaring",
  "serde",
- "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3_rebased_metrics)",
+ "snarkos-node-metrics 2.0.2 (git+https://github.com/eqlabs/snarkos?branch=bft_testnet3)",
  "tap",
  "thiserror",
  "tokio",
@@ -3078,7 +3078,7 @@ dependencies = [
 [[package]]
 name = "narwhal-storage"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "dashmap",
  "fail",
@@ -3099,7 +3099,7 @@ dependencies = [
 [[package]]
 name = "narwhal-types"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "anemo",
  "anemo-build",
@@ -3141,7 +3141,7 @@ dependencies = [
 [[package]]
 name = "narwhal-worker"
 version = "0.1.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "anemo",
  "anemo-tower",
@@ -4991,7 +4991,7 @@ dependencies = [
 [[package]]
 name = "snarkos-node-metrics"
 version = "2.0.2"
-source = "git+https://github.com/eqlabs/snarkos?branch=bft_testnet3_rebased_metrics#b70a1f589dba3ec745477dc904d493efb0d31190"
+source = "git+https://github.com/eqlabs/snarkos?branch=bft_testnet3#39384219d5861ab60e4545ee863a4440168b9c4d"
 dependencies = [
  "metrics",
  "metrics-exporter-prometheus",
@@ -5830,7 +5830,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "telemetry-subscribers"
 version = "0.2.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "crossterm 0.25.0",
  "once_cell",
@@ -6382,7 +6382,7 @@ dependencies = [
 [[package]]
 name = "typed-store"
 version = "0.4.0"
-source = "git+https://github.com/eqlabs/bullshark-bft/?branch=feat/metrics#e064a8761a0c5bc27f9196f1e1fff6ada869fe59"
+source = "git+https://github.com/eqlabs/bullshark-bft/#394ca40a46977b3fe8b6459dcff792d94cb936bb"
 dependencies = [
  "async-trait",
  "bincode 1.3.3",
