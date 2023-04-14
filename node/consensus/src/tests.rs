@@ -731,11 +731,12 @@ function hello:
     std::future::pending::<()>().await;
 }
 
+const NUM: usize = 100;
+
 #[tokio::test]
 #[ignore = "Run this manually to send messages to the snarkOS BFT."]
 #[traced_test]
 async fn pre_generate() {
-    const NUM: usize = 100;
     let path = format!("/var/tmp/aleo-transactions-{NUM}.bin");
     let mut file = std::fs::OpenOptions::new()
             .create(true) // To create a new file
@@ -867,7 +868,6 @@ output r2 as u32.private;
 #[ignore = "Run this manually to send messages to the snarkOS BFT."]
 #[traced_test]
 async fn read_pre_generated_transactions() {
-    const NUM: usize = 100;
     let path = format!("/var/tmp/aleo-transactions-{NUM}.bin");
     let mut file = std::fs::OpenOptions::new().read(true).open(path).expect("failed to read file");
     let tx_uris = vec![
