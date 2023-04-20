@@ -20,6 +20,7 @@ use snarkos_node_bft_consensus::{batched_transactions, sort_transactions};
 use snarkos_node_messages::{
     BlockRequest,
     BlockResponse,
+    ConsensusId,
     Data,
     DataBlocks,
     DisconnectReason,
@@ -30,12 +31,20 @@ use snarkos_node_messages::{
     Pong,
     UnconfirmedTransaction,
 };
+use snarkos_node_router::{ExtendedHandshake, Peer};
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{error, EpochChallenge, Network, Transaction};
 
 use bytes::BytesMut;
+use fastcrypto::{
+    traits::{Signer, ToFromBytes},
+    Verifier,
+};
 use futures_util::sink::SinkExt;
 use std::{collections::HashSet, io, net::SocketAddr, time::Duration};
+use tokio::net::TcpStream;
+use tokio_stream::StreamExt;
+use tokio_util::codec::Framed;
 
 impl<N: Network, C: ConsensusStorage<N>> P2P for Validator<N, C> {
     /// Returns a reference to the TCP instance.
@@ -45,15 +54,17 @@ impl<N: Network, C: ConsensusStorage<N>> P2P for Validator<N, C> {
 }
 
 #[async_trait]
-impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
+impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C>
+where
+    Self: ExtendedHandshake<N>,
+{
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
         // Perform the handshake.
-        let peer_addr = connection.addr();
-        let conn_side = connection.side();
-        let stream = self.borrow_stream(&mut connection);
-        let genesis_header = self.ledger.get_header(0).map_err(|e| error(format!("{e}")))?;
-        let (peer_ip, mut framed) = self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
+        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
+
+        // TODO: perhaps this can be moved somewhere else in future? It is technically not part of
+        // the handshake.
 
         // Retrieve the block locators.
         let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
@@ -66,10 +77,79 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Validator<N, C> {
 
         // Send the first `Ping` message to the peer.
         let message = Message::Ping(Ping::new(self.node_type(), block_locators));
-        trace!("Sending '{}' to '{peer_ip}'", message.name());
+        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
         framed.send(message).await?;
 
         Ok(connection)
+    }
+}
+
+#[async_trait]
+impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Validator<N, C> {
+    fn genesis_header(&self) -> io::Result<Header<N>> {
+        self.ledger.get_header(0).map_err(|e| error(e.to_string()))
+    }
+
+    async fn handshake_extension<'a>(
+        &'a self,
+        peer_addr: SocketAddr,
+        peer: Peer<N>,
+        mut framed: Framed<&'a mut TcpStream, MessageCodec<N>>,
+    ) -> io::Result<(Peer<N>, Framed<&'a mut TcpStream, MessageCodec<N>>)> {
+        if peer.node_type() != NodeType::Validator {
+            return Ok((peer, framed));
+        }
+
+        // Establish quorum with other validators:
+        //
+        // 1. Sign and send the node's pub key.
+        // 2. Receive and verify peer's signed pub key.
+        // 3. Insert into connected_committee_members.
+        // 4. If quorum threshold is reached, start the bft.
+
+        // 1.
+        // BFT must be set here.
+        // TODO: we should probably use something else than the public key, potentially interactive, since this could
+        // be copied and reused by a malicious validator.
+        let public_key = self.primary_keypair.public();
+        let signature = self.primary_keypair.sign(public_key.as_bytes());
+
+        let message = Message::ConsensusId(Box::new(ConsensusId { public_key: public_key.clone(), signature }));
+        framed.send(message).await?;
+
+        // 2.
+        let consensus_id = match framed.try_next().await? {
+            Some(Message::ConsensusId(data)) => data,
+            _ => return Err(error(format!("'{peer_addr}' did not send a 'ConsensusId' message"))),
+        };
+
+        // Check the advertised public key exists in the committee.
+        if !self.committee.keys().contains(&&consensus_id.public_key) {
+            return Err(error(format!("'{peer_addr}' is not part of the committee")));
+        }
+
+        // Check the signature.
+        // TODO: again, the signed message should probably be something we send to the peer, not
+        // their public key.
+        if consensus_id.public_key.verify(consensus_id.public_key.as_bytes(), &consensus_id.signature).is_err() {
+            return Err(error(format!("'{peer_addr}' couldn't verify their identity")));
+        }
+
+        // 3.
+        // Track the committee member.
+        // TODO: in future we could error here if it already exists in the collection but that
+        // logic is probably best implemented when dynamic committees are being considered.
+        self.router.connected_committee_members.write().insert(peer.ip(), consensus_id.public_key);
+
+        // 4.
+        // If quorum is reached, start the consensus but only if it hasn't already been started.
+        let connected_stake =
+            self.router.connected_committee_members.read().values().map(|pk| self.committee.stake(pk)).sum::<u64>();
+        if connected_stake >= self.committee.quorum_threshold() && self.bft.get().is_none() {
+            self.start_bft().await.unwrap()
+        }
+
+        Ok((peer, framed))
     }
 }
 
@@ -79,6 +159,7 @@ impl<N: Network, C: ConsensusStorage<N>> Disconnect for Validator<N, C> {
     async fn handle_disconnect(&self, peer_addr: SocketAddr) {
         if let Some(peer_ip) = self.router.resolve_to_listener(&peer_addr) {
             self.router.remove_connected_peer(peer_ip);
+            self.router.connected_committee_members.write().remove(&peer_ip);
         }
     }
 }
@@ -222,7 +303,7 @@ impl<N: Network, C: ConsensusStorage<N>> Inbound<N> for Validator<N, C> {
         }
 
         // TODO: perform more elaborate propagation
-        self.propagate(Message::NewBlock(serialized), vec![peer_ip]);
+        self.propagate(Message::NewBlock(serialized), &[peer_ip]);
 
         true
     }

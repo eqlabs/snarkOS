@@ -27,7 +27,7 @@ use snarkvm::{
         network::{prelude::*, Testnet3},
         program::{Entry, Identifier, Literal, Plaintext, Value},
     },
-    prelude::TestRng,
+    prelude::{ProgramID, TestRng},
     synthesizer::{
         block::{Block, Transaction, Transactions},
         program::Program,
