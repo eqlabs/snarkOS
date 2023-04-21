@@ -24,14 +24,12 @@ use snarkos_node_messages::{
     Message,
     MessageCodec,
     NewBlock,
-    Ping,
     Pong,
 };
-use snarkos_node_router::{ExtendedHandshake, Routing};
+use snarkos_node_router::Routing;
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{error, EpochChallenge, Header};
 
-use futures_util::sink::SinkExt;
 use std::{io, net::SocketAddr};
 
 impl<N: Network, C: ConsensusStorage<N>> P2P for Beacon<N, C> {
@@ -46,30 +44,39 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Beacon<N, C> {
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
         // Perform the handshake.
-        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
-
-        // Retrieve the block locators.
-        let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
-            Ok(block_locators) => Some(block_locators),
-            Err(e) => {
-                error!("Failed to get block locators: {e}");
-                return Err(error(format!("Failed to get block locators: {e}")));
-            }
-        };
-
-        // Send the first `Ping` message to the peer.
-        let message = Message::Ping(Ping::new(self.node_type(), block_locators));
-        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
-        framed.send(message).await?;
+        let peer_addr = connection.addr();
+        let conn_side = connection.side();
+        let stream = self.borrow_stream(&mut connection);
+        let genesis_header = self.ledger.get_header(0).map_err(|e| error(format!("{e}")))?;
+        self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
 
         Ok(connection)
     }
 }
 
 #[async_trait]
-impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Beacon<N, C> {
-    fn genesis_header(&self) -> io::Result<Header<N>> {
-        self.ledger.get_header(0).map_err(|e| error(e.to_string()))
+impl<N: Network, C: ConsensusStorage<N>> OnConnect for Beacon<N, C>
+where
+    Self: Outbound<N>,
+{
+    async fn on_connect(&self, peer_addr: SocketAddr) {
+        let peer_ip = if let Some(ip) = self.router.resolve_to_listener(&peer_addr) {
+            ip
+        } else {
+            return;
+        };
+
+        // Retrieve the block locators.
+        let block_locators = match crate::helpers::get_block_locators(&self.ledger) {
+            Ok(block_locators) => Some(block_locators),
+            Err(e) => {
+                error!("Failed to get block locators: {e}");
+                return;
+            }
+        };
+
+        // Send the first `Ping` message to the peer.
+        self.send_ping(peer_ip, block_locators);
     }
 }
 

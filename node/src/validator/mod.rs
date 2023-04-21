@@ -31,18 +31,22 @@ use snarkos_node_messages::{BlockRequest, Message, NodeType, PuzzleResponse, Unc
 use snarkos_node_rest::Rest;
 use snarkos_node_router::{Heartbeat, Inbound, Outbound, Router, Routing};
 use snarkos_node_tcp::{
-    protocols::{Disconnect, Handshake, Reading, Writing},
+    protocols::{Disconnect, Handshake, OnConnect, Reading, Writing},
     P2P,
 };
 use snarkvm::prelude::{Block, ConsensusStorage, Header, Network, ProverSolution};
 
 use anyhow::Result;
-use fastcrypto::{bls12381::min_sig::BLS12381KeyPair, traits::KeyPair};
+use fastcrypto::{
+    bls12381::min_sig::{BLS12381KeyPair, BLS12381PublicKey},
+    traits::KeyPair,
+};
 use narwhal_config::{Committee, Import};
 use once_cell::sync::OnceCell;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use rand::thread_rng;
 use std::{
+    collections::HashMap,
     fs,
     net::SocketAddr,
     sync::{
@@ -72,6 +76,9 @@ pub struct Validator<N: Network, C: ConsensusStorage<N>> {
     primary_keypair: Arc<BLS12381KeyPair>,
     /// Current consensus committee, might need to be mutable for dynamic committees.
     committee: Committee,
+    /// The set of connected committee members by public key, no mapping is required currently but
+    /// it will likely be necessary when handling dynamic committees).
+    connected_committee_members: Arc<RwLock<HashMap<SocketAddr, BLS12381PublicKey>>>,
     /// The running BFT consensus instance.
     bft: Arc<OnceCell<RunningConsensusInstance<BftExecutionState<N, C>>>>,
 
@@ -127,6 +134,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             shutdown: Default::default(),
             primary_keypair: primary_keypair.into(),
             committee,
+            connected_committee_members: Default::default(),
             // Note: starting the BFT is called from the handshake logic once quorum is reached.
             bft: Default::default(),
             dev,

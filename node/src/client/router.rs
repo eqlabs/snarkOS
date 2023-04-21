@@ -16,20 +16,11 @@
 
 use super::*;
 
-use snarkos_node_messages::{
-    BlockRequest,
-    DisconnectReason,
-    MessageCodec,
-    NewBlock,
-    Ping,
-    Pong,
-    UnconfirmedTransaction,
-};
-use snarkos_node_router::{ExtendedHandshake, Routing};
+use snarkos_node_messages::{BlockRequest, DisconnectReason, MessageCodec, NewBlock, Pong, UnconfirmedTransaction};
+use snarkos_node_router::Routing;
 use snarkos_node_tcp::{Connection, ConnectionSide, Tcp};
 use snarkvm::prelude::{Network, Transaction};
 
-use futures_util::sink::SinkExt;
 use std::{io, net::SocketAddr, time::Duration};
 
 impl<N: Network, C: ConsensusStorage<N>> P2P for Client<N, C> {
@@ -44,21 +35,30 @@ impl<N: Network, C: ConsensusStorage<N>> Handshake for Client<N, C> {
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
         // Perform the handshake.
-        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
-
-        // Send the first `Ping` message to the peer.
-        let message = Message::Ping(Ping::new(self.node_type(), None));
-        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
-        framed.send(message).await?;
+        let peer_addr = connection.addr();
+        let conn_side = connection.side();
+        let stream = self.borrow_stream(&mut connection);
+        let genesis_header = *self.genesis.header();
+        self.router.handshake(peer_addr, stream, conn_side, genesis_header).await?;
 
         Ok(connection)
     }
 }
 
 #[async_trait]
-impl<N: Network, C: ConsensusStorage<N>> ExtendedHandshake<N> for Client<N, C> {
-    fn genesis_header(&self) -> io::Result<Header<N>> {
-        Ok(*self.genesis.header())
+impl<N: Network, C: ConsensusStorage<N>> OnConnect for Client<N, C>
+where
+    Self: Outbound<N>,
+{
+    async fn on_connect(&self, peer_addr: SocketAddr) {
+        let peer_ip = if let Some(ip) = self.router.resolve_to_listener(&peer_addr) {
+            ip
+        } else {
+            return;
+        };
+
+        // Send the first `Ping` message to the peer.
+        self.send_ping(peer_ip, None);
     }
 }
 

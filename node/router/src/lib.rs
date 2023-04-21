@@ -46,17 +46,9 @@ use snarkvm::prelude::{Address, Network, PrivateKey, ViewKey};
 
 use anyhow::{bail, Result};
 use core::str::FromStr;
-use fastcrypto::bls12381::min_sig::BLS12381PublicKey;
 use indexmap::{IndexMap, IndexSet};
 use parking_lot::{Mutex, RwLock};
-use std::{
-    collections::{HashMap, HashSet},
-    future::Future,
-    net::SocketAddr,
-    ops::Deref,
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::HashSet, future::Future, net::SocketAddr, ops::Deref, sync::Arc, time::Instant};
 use tokio::task::JoinHandle;
 
 #[derive(Clone)]
@@ -85,16 +77,13 @@ pub struct InnerRouter<N: Network> {
     sync: Sync<N>,
     /// The set of trusted peers.
     trusted_peers: IndexSet<SocketAddr>,
-    /// The set of connected committee members by public key, no mapping is required currently but
-    /// it will likely be necessary when handling dynamic committees).
-    pub connected_committee_members: RwLock<HashMap<SocketAddr, BLS12381PublicKey>>,
     /// The map of connected peer IPs to their peer handlers.
     connected_peers: RwLock<IndexMap<SocketAddr, Peer<N>>>,
     /// The set of handshaking peers. While `Tcp` already recognizes the connecting IP addresses
     /// and prevents duplicate outbound connection attempts to the same IP address, it is unable to
     /// prevent simultaneous "two-way" connections between two peers (i.e. both nodes simultaneously
     /// attempt to connect to each other). This set is used to prevent this from happening.
-    connecting_peers: Mutex<HashSet<SocketAddr>>,
+    pub connecting_peers: Mutex<HashSet<SocketAddr>>,
     /// The set of candidate peer IPs.
     candidate_peers: RwLock<IndexSet<SocketAddr>>,
     /// The set of restricted peer IPs.
@@ -159,7 +148,6 @@ impl<N: Network> Router<N> {
             sync: Default::default(),
             trusted_peers: trusted_peers.iter().copied().collect(),
             connected_peers: Default::default(),
-            connected_committee_members: Default::default(),
             connecting_peers: Default::default(),
             candidate_peers: Default::default(),
             restricted_peers: Default::default(),
@@ -445,8 +433,6 @@ impl<N: Network> Router<N> {
         self.resolver.insert_peer(peer_ip, peer_addr);
         // Add an entry for this `Peer` in the connected peers.
         self.connected_peers.write().insert(peer_ip, peer);
-        // Remove this peer from the connecting peers, if it exists.
-        self.connecting_peers.lock().remove(&peer_ip);
         // Remove this peer from the candidate peers, if it exists.
         self.candidate_peers.write().remove(&peer_ip);
         // Remove this peer from the restricted peers, if it exists.

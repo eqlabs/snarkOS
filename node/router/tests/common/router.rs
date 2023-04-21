@@ -21,14 +21,13 @@ use snarkos_node_messages::{
     Message,
     MessageCodec,
     NewBlock,
-    Ping,
     Pong,
     UnconfirmedSolution,
     UnconfirmedTransaction,
 };
-use snarkos_node_router::{ExtendedHandshake, Heartbeat, Inbound, Outbound, Router, Routing};
+use snarkos_node_router::{Heartbeat, Inbound, Outbound, Router, Routing};
 use snarkos_node_tcp::{
-    protocols::{Disconnect, Handshake, Reading, Writing},
+    protocols::{Disconnect, Handshake, OnConnect, Reading, Writing},
     Connection,
     ConnectionSide,
     Tcp,
@@ -37,7 +36,6 @@ use snarkos_node_tcp::{
 use snarkvm::prelude::{Block, EpochChallenge, Header, Network, ProverSolution, Transaction};
 
 use async_trait::async_trait;
-use futures_util::sink::SinkExt;
 use std::{io, net::SocketAddr};
 use tracing::*;
 
@@ -70,21 +68,20 @@ impl<N: Network> Handshake for TestRouter<N> {
     /// Performs the handshake protocol.
     async fn perform_handshake(&self, mut connection: Connection) -> io::Result<Connection> {
         // Perform the handshake.
-        let (peer, mut framed) = self.extended_handshake(&mut connection).await?;
-
-        // Send the first `Ping` message to the peer.
-        let message = Message::Ping(Ping::new(self.node_type(), None));
-        trace!("Sending '{}' to '{}'", message.name(), peer.ip());
-        framed.send(message).await?;
+        let peer_addr = connection.addr();
+        let conn_side = connection.side();
+        let stream = self.borrow_stream(&mut connection);
+        let genesis_header = *sample_genesis_block().header();
+        self.router().handshake(peer_addr, stream, conn_side, genesis_header).await?;
 
         Ok(connection)
     }
 }
 
 #[async_trait]
-impl<N: Network> ExtendedHandshake<N> for TestRouter<N> {
-    fn genesis_header(&self) -> io::Result<Header<N>> {
-        Ok(sample_genesis_block().header().clone())
+impl<N: Network> OnConnect for TestRouter<N> {
+    async fn on_connect(&self, _peer_addr: SocketAddr) {
+        // This behavior is currently not tested.
     }
 }
 
