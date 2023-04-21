@@ -107,7 +107,7 @@ pub trait ExtendedHandshake<N: Network>: Handshake + Outbound<N> {
         let conn_side = connection.side();
         match self.extended_handshake_inner(connection).await {
             // In case of success, conclude the extended handshake.
-            Ok((peer, mut framed)) => {
+            Ok((peer, framed)) => {
                 // Registed the peer in the list of connected peers.
                 self.router().insert_connected_peer(peer.clone(), peer_addr);
 

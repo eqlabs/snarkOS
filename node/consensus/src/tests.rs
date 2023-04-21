@@ -27,7 +27,7 @@ use snarkvm::{
         network::{prelude::*, Testnet3},
         program::{Entry, Identifier, Literal, Plaintext, Value},
     },
-    prelude::{ProgramID, TestRng},
+    prelude::TestRng,
     synthesizer::{
         block::{Block, Transaction, Transactions},
         program::Program,
@@ -647,16 +647,26 @@ function hello:
     .unwrap();
 
     // Fetch the unspent records.
+    let microcredits = Identifier::from_str("microcredits").unwrap();
     let records: Vec<_> = consensus
         .ledger
         .find_records(&genesis_view_key, RecordsFilter::Unspent)
         .unwrap()
-        .filter(|(_, record)| !record.gates().is_zero())
+        .filter(|(_, record)| match record.data().get(&microcredits) {
+            Some(Entry::Private(Plaintext::Literal(Literal::U64(amount), _))) => !amount.is_zero(),
+            _ => false,
+        })
         .collect();
-    assert_eq!(records.len(), 1);
+    assert_eq!(records.len(), 4);
 
     let fee = 600000;
-    let (_, record) = records.iter().find(|(_, r)| ***r.gates() >= fee).unwrap();
+    let (_, record) = records
+        .iter()
+        .find(|(_, r)| match r.data().get(&microcredits) {
+            Some(Entry::Private(Plaintext::Literal(Literal::U64(amount), _))) => **amount >= fee,
+            _ => false,
+        })
+        .unwrap();
 
     // Create a deployment transaction for the above program.
     let deployment_transaction = Transaction::deploy(
@@ -703,8 +713,7 @@ function hello:
             let transaction = Transaction::execute(
                 consensus.ledger.vm(),
                 &genesis_private_key,
-                ProgramID::from_str("simple.aleo").unwrap(),
-                Identifier::from_str("hello").unwrap(),
+                ("simple.aleo", "hello"),
                 inputs.iter(),
                 None,
                 None,
