@@ -34,6 +34,7 @@ mod inbound;
 pub use inbound::*;
 
 mod outbound;
+use narwhal_crypto::PublicKey;
 pub use outbound::*;
 
 mod routing;
@@ -46,7 +47,6 @@ use snarkvm::prelude::{Address, Network, PrivateKey, ViewKey};
 
 use anyhow::{bail, Result};
 use core::str::FromStr;
-use fastcrypto::bls12381::min_sig::BLS12381PublicKey;
 use indexmap::{IndexMap, IndexSet};
 use parking_lot::{Mutex, RwLock};
 use std::{
@@ -87,7 +87,7 @@ pub struct InnerRouter<N: Network> {
     trusted_peers: IndexSet<SocketAddr>,
     /// The set of connected committee members by public key, no mapping is required currently but
     /// it will likely be necessary when handling dynamic committees).
-    pub connected_committee_members: RwLock<HashMap<SocketAddr, BLS12381PublicKey>>,
+    pub connected_committee_members: RwLock<HashMap<SocketAddr, PublicKey>>,
     /// The map of connected peer IPs to their peer handlers.
     connected_peers: RwLock<IndexMap<SocketAddr, Peer<N>>>,
     /// The set of handshaking peers. While `Tcp` already recognizes the connecting IP addresses

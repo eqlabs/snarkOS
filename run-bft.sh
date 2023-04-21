@@ -7,13 +7,8 @@ function func() {
 	echo "Done"
 }
 
-BEACON_COMMAND="cargo +stable run -- start --nodisplay --verbosity 0 --dev 0 --beacon"
-
-echo "starting beacon as 0, check logs at ./beacon.log"
-$BEACON_COMMAND '' >beacon.log 2>&1 &
-
 # Start other validators without metrics
-for i in 1 2 3 4; do
+for i in 0 1 2 3; do
 	# Enable metrics for first validator only
 	extra_args=""
 	if [[ "$i" -eq 1 ]]; then

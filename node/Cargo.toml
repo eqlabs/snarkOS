@@ -51,9 +51,16 @@ features = ["sink"]
 [dependencies.indexmap]
 version = "1"
 
+[dependencies.narwhal-node]
+workspace = true
+
+[dependencies.narwhal-crypto]
+workspace = true
+
 [dependencies.narwhal-config]
 git = "https://github.com/eqlabs/bullshark-bft/"
 package = "narwhal-config"
+branch = "crypto"
 
 [dependencies.num_cpus]
 version = "1"

@@ -17,9 +17,16 @@
 mod router;
 
 use crate::traits::NodeInterface;
+use anyhow::Result;
+use narwhal_config::{Committee, Import};
+use narwhal_crypto::KeyPair as NarwhalKeyPair;
+use narwhal_node::keypair_file::read_authority_keypair_from_file;
+use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
+use rand::thread_rng;
 use snarkos_account::Account;
 use snarkos_node_bft_consensus::{
-    setup::{read_authority_keypair_from_file, workspace_dir, CommitteeSetup, PrimarySetup},
+    setup::{workspace_dir, CommitteeSetup, PrimarySetup},
     BftExecutionState,
     InertConsensusInstance,
     RunningConsensusInstance,
@@ -35,13 +42,6 @@ use snarkos_node_tcp::{
     P2P,
 };
 use snarkvm::prelude::{Block, ConsensusStorage, Header, Network, ProverSolution};
-
-use anyhow::Result;
-use fastcrypto::{bls12381::min_sig::BLS12381KeyPair, traits::KeyPair};
-use narwhal_config::{Committee, Import};
-use once_cell::sync::OnceCell;
-use parking_lot::RwLock;
-use rand::thread_rng;
 use std::{
     fs,
     net::SocketAddr,
@@ -69,7 +69,7 @@ pub struct Validator<N: Network, C: ConsensusStorage<N>> {
     /// The shutdown signal.
     shutdown: Arc<AtomicBool>,
     /// The primary keypair of the node exposed here for handshaking purposes.
-    primary_keypair: Arc<BLS12381KeyPair>,
+    primary_keypair: Arc<NarwhalKeyPair>,
     /// Current consensus committee, might need to be mutable for dynamic committees.
     committee: Committee,
     /// The running BFT consensus instance.
@@ -154,7 +154,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
 
     // Reads the committee configuration and the primary's authority keypair. This is needed to
     // establish quorum before the BFT process is started.
-    fn read_committee(dev: Option<u16>) -> (BLS12381KeyPair, Committee) {
+    fn read_committee(dev: Option<u16>) -> (NarwhalKeyPair, Committee) {
         // Prepare the path containing BFT consensus files.
         let bft_path =
             format!("{}/node/bft-consensus/committee/{}", workspace_dir(), if dev.is_some() { ".dev" } else { "" });
