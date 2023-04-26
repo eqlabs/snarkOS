@@ -564,6 +564,7 @@ async fn test_bullshark_full() {
     // Sample the genesis private key.
     let genesis_private_key = test_helpers::sample_genesis_private_key(&mut rng);
     let genesis_view_key = ViewKey::try_from(&genesis_private_key).unwrap();
+    let genesis_address = Address::try_from(&genesis_private_key).unwrap();
 
     // Sample the genesis block.
     let genesis = test_helpers::sample_genesis_block_with_private_key(&mut rng, genesis_private_key);
@@ -659,7 +660,7 @@ function hello:
         .collect();
     assert_eq!(records.len(), 4);
 
-    let fee = 600000;
+    let fee = 4000000;
     let (_, record) = records
         .iter()
         .find(|(_, r)| match r.data().get(&microcredits) {
@@ -707,13 +708,20 @@ function hello:
 
     // Generate execution transactions in the background.
     tokio::task::spawn_blocking(move || {
-        let inputs = [Value::from_str("10u32").unwrap(), Value::from_str("100u32").unwrap()];
+        // TODO (raychu86): Update this bandaid workaround.
+        //  Currently the `mint` function can be called without restriction if the recipient is an authorized `beacon`.
+        //  Consensus rules will change later when staking and proper coinbase rewards are integrated, which will invalidate this approach.
+        //  Note: A more proper way to approach this is to create `split` transactions and then start generating increasingly larger numbers of
+        //  transactions, once more and more records are available to you in subsequent blocks.
+
+        // Create inputs for the `credits.aleo/mint` call.
+        let inputs = [Value::from_str(&genesis_address.to_string()).unwrap(), Value::from_str("1u64").unwrap()];
 
         for i in 0.. {
             let transaction = Transaction::execute(
                 consensus.ledger.vm(),
                 &genesis_private_key,
-                ("simple.aleo", "hello"),
+                ("credits.aleo", "mint"),
                 inputs.iter(),
                 None,
                 None,
