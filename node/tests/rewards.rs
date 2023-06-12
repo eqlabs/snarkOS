@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(int_roundings)]
-
-use std::{collections::HashMap, marker::PhantomData, ops::Neg, time::SystemTime};
+use std::{collections::HashMap, marker::PhantomData, time::SystemTime};
 
 type Address = u64;
 
@@ -62,7 +60,7 @@ trait NetworkConstants {
     }
 
     fn reward_anchor() -> u64 {
-        (2 * Self::SUPPLY_GENESIS).div_floor(Self::height_year10() * (Self::height_year10() + 1))
+        (2 * Self::SUPPLY_GENESIS) / (Self::height_year10() * (Self::height_year10() + 1))
     }
 
     fn reward_staking() -> u64 {
@@ -142,10 +140,14 @@ impl<T: NetworkConstants> Block<T> {
     }
 
     fn reward_proving(&self, genesis: &Block<T>) -> u64 {
-        let multiplier = T::height_year10().saturating_sub(self.height) as f64;
-        let inverse_factor = (self.factor(genesis.ts) as i64).neg();
-        let factor = (2_f32).powi(inverse_factor as i32) as f64;
-        (multiplier * (T::reward_anchor() as f64) * factor).round() as u64
+        // to convert the algorithm into integers, we do the following
+        // reward_{proving} = max(0, height_{year10} - block_i.height) * reward_{anchor} * 2^{-factor_i}
+        //                  = (multiplier * reward_{anchor}) / 2^{factor_i}
+        let multiplier = T::height_year10().saturating_sub(self.height);
+        // let inverse_factor = (self.factor(genesis.ts) as i64).neg();
+        // let factor = (2_f32).powi(inverse_factor as i32) as f64;
+        // (multiplier * (T::reward_anchor() as f64) * factor).round() as u64
+        (multiplier * T::reward_anchor()) / (2_u64.pow(self.factor(genesis.ts)))
     }
 
     fn compute_rewards(self, genesis: Block<T>) -> Rewards {
@@ -209,10 +211,10 @@ mod tests {
         assert_eq!(rewards.stakers.len(), 1);
         if let Some(reward) = rewards.stakers.get(&rewards.leader.0) {
             // TODO: write the expected value in equation form
-            assert_eq!(*reward, 19796895);
+            assert_eq!(*reward, 19796894);
             // no fees, so no leader rewards
             assert_eq!(rewards.leader.1, 0);
-            assert_eq!(rewards.total, 19796895);
+            assert_eq!(rewards.total, 19796894);
         } else {
             panic!();
         }
