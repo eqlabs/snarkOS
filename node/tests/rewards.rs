@@ -221,20 +221,24 @@ mod tests {
         }
     }
 
+    fn arbitrary_validator(max_stake: u64) -> impl Strategy<Value = Validator> {
+        (any::<u64>(), 1..max_stake).prop_map(|(address, stake)| Validator { address, stake })
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig {
             cases: 100,
             failure_persistence: None,
-            verbose: 2,
             .. ProptestConfig::default()
         })]
 
+
         #[test]
-        fn default_constants(stake in 0u64..u64::MAX, address in 1u64..256) {
-            let leader: Validator = Validator { stake, address };
-            let network = DefaultConstants::new(vec![leader], leader);
+        fn default_constants(validators in proptest::collection::vec(arbitrary_validator(1000), 1..4)) {
+            let leader = validators[0];
+            let network = DefaultConstants::new(validators.clone(), leader);
             assert_eq!(network.genesis.leader, leader);
-            assert_eq!(network.genesis.validators, vec![leader]);
+            assert_eq!(network.genesis.validators, validators);
             assert_eq!(network.genesis.height, 0);
         }
     }
