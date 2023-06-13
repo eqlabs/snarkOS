@@ -16,18 +16,18 @@ use std::{collections::HashMap, marker::PhantomData, time::SystemTime};
 
 type Address = u64;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 struct Validator {
     stake: u64,
     address: Address,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 struct Tx {
     fee_total: u64,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 struct Proof {
     target: u64,
     prover: Address,
@@ -188,6 +188,7 @@ impl<T: NetworkConstants> Block<T> {
 #[cfg(test)]
 mod tests {
     use crate::{Block, DefaultConstants, NetworkConstants, Validator};
+    use proptest::prelude::*;
 
     #[test]
     fn test_smoke() {
@@ -217,6 +218,24 @@ mod tests {
             assert_eq!(rewards.total, 19796894);
         } else {
             panic!();
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 100,
+            failure_persistence: None,
+            verbose: 2,
+            .. ProptestConfig::default()
+        })]
+
+        #[test]
+        fn default_constants(stake in 0u64..u64::MAX, address in 1u64..256) {
+            let leader: Validator = Validator { stake, address };
+            let network = DefaultConstants::new(vec![leader], leader);
+            assert_eq!(network.genesis.leader, leader);
+            assert_eq!(network.genesis.validators, vec![leader]);
+            assert_eq!(network.genesis.height, 0);
         }
     }
 }
