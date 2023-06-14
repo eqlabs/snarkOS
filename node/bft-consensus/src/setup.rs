@@ -219,7 +219,8 @@ impl CommitteeSetup {
             let base_path =
                 format!("{}/node/bft-consensus/committee/{}", workspace_dir(), dev_subpath(dev, primary_addr));
             if fs::metadata(&base_path).is_err() {
-                fs::create_dir_all(&base_path).unwrap(); // TODO: improve error handling here and below
+                debug!("Creating missing directory {base_path}");
+                fs::create_dir_all(&base_path).expect(&format!("Couldn't create the missing {base_path}"));
             }
 
             // Write the committee file to the filesystem.
