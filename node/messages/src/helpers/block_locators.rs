@@ -77,8 +77,6 @@ impl<N: Network> BlockLocators<N> {
         true
     }
 
-
-
     /// Checks that this block locators are well-formed.
     pub fn ensure_is_valid(&self) -> Result<()> {
         // Ensure the block locators are well-formed.

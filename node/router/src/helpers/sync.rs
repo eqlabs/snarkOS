@@ -572,10 +572,10 @@ impl<N: Network> Sync<N> {
                                 }
                                 // Add the other peer to the list of sync peers.
                                 sync_peers.insert(*other_ip, other_locators.clone());
-                            },
+                            }
                             Err(error) => {
                                 warn!("Inconsistent block locators between {} and {}: {}", *peer_ip, *other_ip, error);
-                            },
+                            }
                         }
                     }
                 }
