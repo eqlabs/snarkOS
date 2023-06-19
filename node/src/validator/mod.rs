@@ -225,7 +225,12 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             let mut rng = thread_rng();
 
             // Hardcode the dev number of primaries, at least for now.
-            const NUM_PRIMARIES: usize = IPS.len();
+            // const NUM_PRIMARIES: usize = IPS.len();
+            //
+            // const PRIMARY_PORT: u16 = 1030;
+            // const WORKER_PORT_NET: u16 = 1242;
+            // const WORKER_PORT_TX: u16 = 1360;
+            const NUM_PRIMARIES: usize = 4;
 
             const PRIMARY_PORT: u16 = 1030;
             const WORKER_PORT_NET: u16 = 1242;
@@ -236,11 +241,11 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             for i in 1..=NUM_PRIMARIES {
                 // TODO: set up a meaningful stake
                 let primary = PrimarySetup::new(
-                    Some(format!("/ip4/{}/udp/{}", IPS[i - 1], PRIMARY_PORT).parse().unwrap()),
+                    Some(format!("/ip4/127.0.0.1/udp/{}", 1029 + i).parse().unwrap()),
                     1,
                     vec![(
-                        format!("/ip4/{}/udp/{}", IPS[i - 1], WORKER_PORT_NET).parse().unwrap(),
-                        format!("/ip4/{}/tcp/{}/http", IPS[i - 1], WORKER_PORT_TX).parse().unwrap(),
+                        format!("/ip4/127.0.0.1/udp/{}", 1241 + i).parse().unwrap(),
+                        format!("/ip4/127.0.0.1/tcp/{}/http", 1359 + i).parse().unwrap(),
                     )],
                     &mut rng,
                 );

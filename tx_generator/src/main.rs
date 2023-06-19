@@ -17,7 +17,8 @@ use std::{env, net::IpAddr, time::Duration};
 use multiaddr::Protocol;
 use narwhal_config::{Import, WorkerCache};
 use narwhal_types::{TransactionProto, TransactionsClient};
-use rand::prelude::IteratorRandom;
+use rand::prelude::{IteratorRandom, SeedableRng};
+use rand_chacha::ChaChaRng;
 use snarkos_node_bft_consensus::setup::workspace_dir;
 use snarkos_node_consensus::Consensus;
 use snarkos_node_messages::{Data, Message, UnconfirmedTransaction};
@@ -27,7 +28,7 @@ use snarkvm::{
         network::{prelude::*, Testnet3},
         program::{Entry, Identifier, Literal, Plaintext, Value},
     },
-    prelude::{Ledger, RecordsFilter, TestRng},
+    prelude::{ConsensusStore, Ledger, RecordsFilter, TestRng, VM},
     synthesizer::{
         block::{Block, Transaction},
         program::Program,
@@ -45,6 +46,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 type CurrentNetwork = Testnet3;
 type CurrentLedger = Ledger<CurrentNetwork, ConsensusDB<CurrentNetwork>>;
 type CurrentConsensus = Consensus<CurrentNetwork, ConsensusDB<CurrentNetwork>>;
+type CurrentStore = ConsensusStore<CurrentNetwork, ConsensusDB<CurrentNetwork>>;
 
 #[tokio::main]
 async fn main() {
@@ -58,6 +60,9 @@ async fn main() {
     }
     args.next(); // Skip the binary name.
 
+    // Prepare an Rng expected in dev environments.
+    let mut dev_rng = ChaChaRng::seed_from_u64(1234567890u64);
+
     // Retrieve the command.
     let arg = args.next().unwrap();
 
@@ -70,14 +75,23 @@ async fn main() {
     info!("Preparing an instance of consensus that can generate transactions.");
 
     // Initialize the beacon private key.
+    let genesis_private_key = PrivateKey::<CurrentNetwork>::new(&mut dev_rng).unwrap();
     let creator_private_key = PrivateKey::<CurrentNetwork>::from_str(&private_key).unwrap();
     let creator_view_key = ViewKey::try_from(&creator_private_key).unwrap();
     // Initialize the genesis block.
-    let genesis = Block::from_bytes_le(Testnet3::genesis_bytes()).unwrap();
+    // let genesis = Block::from_bytes_le(Testnet3::genesis_bytes()).unwrap();
 
     // Initialize the consensus to generate transactions.
-    let ledger = CurrentLedger::load(genesis, None).unwrap();
-    let consensus = CurrentConsensus::new(ledger, false).unwrap();
+    // let ledger = CurrentLedger::load(genesis, None).unwrap();
+    // let consensus = CurrentConsensus::new(ledger, false).unwrap();
+    // let genesis_address: Address<Testnet3> = *consensus.beacons().keys().next().unwrap();
+
+    // Initialize a new VM.
+    let vm = VM::from(CurrentStore::open(Some(0)).unwrap()).unwrap();
+    // Initialize the genesis block.
+    let genesis = vm.genesis(&genesis_private_key, &mut dev_rng).unwrap();
+    let ledger = CurrentLedger::load(genesis, Some(0)).unwrap();
+    let consensus = CurrentConsensus::new(ledger, true).unwrap();
     let genesis_address: Address<Testnet3> = *consensus.beacons().keys().next().unwrap();
 
     // Create the initial block or start producing transactions.
@@ -86,7 +100,7 @@ async fn main() {
         info!("The ledger containing a block facilitating test transactions is ready!");
     } else if arg == EXPECTED_ARGS[1] {
         // Read the workers file.
-        let base_path = format!("{}/node/bft-consensus/committee/", workspace_dir());
+        let base_path = format!("{}/node/bft-consensus/committee/.dev/", workspace_dir());
         let workers_file = format!("{base_path}.workers.json");
         let worker_cache = WorkerCache::import(&workers_file).expect("Failed to load the worker information");
 
@@ -107,16 +121,20 @@ async fn main() {
             // Create inputs for the `credits.aleo/mint` call.
             let inputs = [Value::from_str(&genesis_address.to_string()).unwrap(), Value::from_str("1u64").unwrap()];
 
+            let mut txs: Vec<Transaction<CurrentNetwork>> = Vec::with_capacity(32);
             for i in 0.. {
+                if i % 32 == 31 {
+                    info!("Sending transactions");
+                    txs.iter().for_each(|tx| tx_sender.send(tx.clone()).unwrap());
+                    txs.clear();
+                }
                 let transaction = consensus
                     .ledger
                     .vm()
                     .execute(&creator_private_key, ("credits.aleo", "mint"), inputs.iter(), None, None, &mut rng)
                     .unwrap();
-
-                info!("Created transaction {} ({}/inf).", transaction.id(), i + 1);
-
-                tx_sender.send(transaction).unwrap();
+                info!("Buffered transaction {} ({}/inf).", &transaction.id(), i + 1);
+                txs.push(transaction);
             }
         });
 
@@ -128,31 +146,34 @@ async fn main() {
         let mut rng = TestRng::default();
 
         // Send the transactions to a random number of BFT workers.
-        while let Some(transaction) = tx_receiver.recv().await {
-            // Randomize the number of worker recipients.
-            let n_recipients: usize = rng.gen_range(1..=4);
+        loop {
+            tokio::time::sleep(Duration::from_millis(20000)).await;
 
-            info!("Sending transaction {} to {} workers.", transaction.id(), n_recipients);
+            while let Some(transaction) = tx_receiver.recv().await {
+                // Randomize the number of worker recipients.
+                let n_recipients: usize = rng.gen_range(1..=4);
 
-            let message = Message::UnconfirmedTransaction(UnconfirmedTransaction {
-                transaction_id: transaction.id(),
-                transaction: Data::Object(transaction),
-            });
-            let mut bytes: Vec<u8> = Vec::new();
-            message.serialize(&mut bytes).unwrap();
-            let payload = bytes::Bytes::from(bytes);
-            let tx = TransactionProto { transaction: payload };
+                info!("Sending transaction {} to {} workers.", transaction.id(), n_recipients);
 
-            // Submit the transaction to the chosen workers.
-            for tx_client in tx_clients.iter_mut().choose_multiple(&mut rng, n_recipients) {
-                if tx_client.submit_transaction(tx.clone()).await.is_err() {
-                    warn!("Couldn't deliver a transaction to one of the workers");
+                let message = Message::UnconfirmedTransaction(UnconfirmedTransaction {
+                    transaction_id: transaction.id(),
+                    transaction: Data::Object(transaction),
+                });
+                let mut bytes: Vec<u8> = Vec::new();
+                message.serialize(&mut bytes).unwrap();
+                let payload = bytes::Bytes::from(bytes);
+                let tx = TransactionProto { transaction: payload };
+
+                // Submit the transaction to the chosen workers.
+                for tx_client in tx_clients.iter_mut().choose_multiple(&mut rng, n_recipients) {
+                    if tx_client.submit_transaction(tx.clone()).await.is_err() {
+                        warn!("Couldn't deliver a transaction to one of the workers");
+                    }
                 }
-            }
 
-            // Wait for a random amount of time before processing further transactions.
-            let delay: u64 = rng.gen_range(0..2_000);
-            tokio::time::sleep(Duration::from_millis(delay)).await;
+                // Wait for a random amount of time before processing further transactions.
+                // let delay: u64 = rng.gen_range(0..2_000);
+            }
         }
 
         // Wait indefinitely.
