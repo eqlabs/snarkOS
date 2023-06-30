@@ -85,7 +85,9 @@ impl<S: ExecutionState + Send + Sync + 'static, V: narwhal_worker::TransactionVa
 
         // Read the shared files describing the committee, workers and parameters.
         let committee_file = format!("{base_path}.committee.json");
-        let committee = Committee::import(&committee_file).expect("Failed to load the committee information");
+        let mut committee = Committee::import(&committee_file).expect("Failed to load the committee information");
+        committee.load();
+
         let workers_file = format!("{base_path}.workers.json");
         let worker_cache = WorkerCache::import(&workers_file).expect("Failed to load the worker information");
         let parameters_file = format!("{base_path}.parameters.json");
