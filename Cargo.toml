@@ -48,14 +48,14 @@ default = [ "jemalloc" ]
 jemalloc = [ "tikv-jemallocator" ]
 
 [workspace.dependencies]
-mysten-network      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "mysten-network", branch = "task/backports-05-2023" }
-narwhal-types       = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types", branch = "task/backports-05-2023" }
-narwhal-config      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-config", branch = "task/backports-05-2023" }
-narwhal-crypto      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-crypto", branch = "task/backports-05-2023" }
-narwhal-executor    = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-executor",branch = "task/backports-05-2023" }
-narwhal-network     = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-network" ,branch = "task/backports-05-2023" }
-narwhal-node        = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-node", branch = "task/backports-05-2023" }
-narwhal-worker      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-worker", branch = "task/backports-05-2023" }
+mysten-network      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "mysten-network", branch = "fix/integration" }
+narwhal-types       = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-types", branch = "fix/integration" }
+narwhal-config      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-config", branch = "fix/integration" }
+narwhal-crypto      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-crypto", branch = "fix/integration" }
+narwhal-executor    = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-executor",branch = "fix/integration" }
+narwhal-network     = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-network" ,branch = "fix/integration" }
+narwhal-node        = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-node", branch = "fix/integration" }
+narwhal-worker      = { git = "https://github.com/eqlabs/bullshark-bft/", package = "narwhal-worker", branch = "fix/integration" }
 
 [dependencies.anyhow]
 version = "1.0.70"
