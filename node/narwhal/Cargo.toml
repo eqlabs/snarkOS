@@ -82,6 +82,9 @@ features = [ "codec" ]
 [dependencies.tracing]
 version = "0.1"
 
+[dependencies.proptest]
+version = "1.2"
+
 [dev-dependencies.rand_chacha]
 version = "0.3"
 

@@ -101,3 +101,65 @@ impl<N: Network> Committee<N> {
         Ok(power)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::ops::Range;
+
+    use indexmap::IndexMap;
+    use proptest::{collection::vec, prelude::*};
+    use snarkos_account::Account;
+
+    type CurrentNetwork = snarkvm::prelude::Testnet3;
+
+    const MIN_MEMBERS: usize = 4;
+    const MAX_MEMBERS: usize = 500;
+
+    const MIN_STAKE: u64 = u64::MIN;
+    const MAX_STAKE: u64 = u64::MAX;
+
+    // Generates a random address.
+    fn arbitrary_address() -> impl Strategy<Value = Address<CurrentNetwork>> {
+        any::<u64>().prop_map(|seed| {
+            let mut rng = TestRng::fixed(seed);
+            let account = Account::<CurrentNetwork>::new(&mut rng).unwrap();
+            account.address() // assuming `address()` method exists on `Account`
+        })
+    }
+
+    // Generates a random address and stake.
+    fn arbitrary_member() -> impl Strategy<Value = (Address<CurrentNetwork>, u64)> {
+        (arbitrary_address(), MIN_STAKE..MAX_STAKE)
+    }
+
+    // Generates a random map of addresses to stakes.
+    fn arbitrary_members(range: Range<usize>) -> impl Strategy<Value = IndexMap<Address<CurrentNetwork>, u64>> {
+        vec(arbitrary_member(), range).prop_map(|vec| vec.into_iter().collect())
+    }
+
+    proptest! {
+        #[test]
+        fn test_new_round_and_members_conditions(round in 1u64.., members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let result = Committee::new(round, members);
+            assert!(result.is_ok(), "New committee creation failed with valid input parameters");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_new_round_zero(members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let result = Committee::new(0, members);
+            assert!(result.is_err(), "New committee creation should fail with zero round");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_new_members_less_than_4(round in 1u64.., members in arbitrary_members(0..4)) {
+            let result = Committee::new(round, members);
+            assert!(result.is_err(), "New committee creation should fail with less than 4 members");
+        }
+    }
+}
