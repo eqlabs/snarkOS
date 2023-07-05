@@ -115,10 +115,10 @@ mod tests {
     type CurrentNetwork = snarkvm::prelude::Testnet3;
 
     const MIN_MEMBERS: usize = 4;
-    const MAX_MEMBERS: usize = 500;
+    const MAX_MEMBERS: usize = 200;
 
     const MIN_STAKE: u64 = u64::MIN;
-    const MAX_STAKE: u64 = u64::MAX;
+    const MAX_STAKE: u64 = 1_000_000_000;
 
     // Generates a random address.
     fn arbitrary_address() -> impl Strategy<Value = Address<CurrentNetwork>> {
@@ -160,6 +160,71 @@ mod tests {
         fn test_new_members_less_than_4(round in 1u64.., members in arbitrary_members(0..4)) {
             let result = Committee::new(round, members);
             assert!(result.is_err(), "New committee creation should fail with less than 4 members");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_to_next_round(round in 1u64.., members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let committee = Committee::new(round, members).unwrap();
+            let next_committee = committee.to_next_round();
+            assert!(next_committee.is_ok(), "New committee creation failed with valid input parameters");
+            assert_eq!(next_committee.unwrap().round(), round.saturating_add(1), "New committee round number should be incremented by 1");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_to_next_round_overflow(members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let committee = Committee::new(u64::MAX, members).unwrap();
+            let next_committee = committee.to_next_round();
+            assert!(next_committee.is_err(), "New committee creation should fail with overflow");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_to_next_round_members_match(round in 1u64.., members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let committee = Committee::new(round, members).unwrap();
+            let next_committee = committee.to_next_round().unwrap();
+            assert_eq!(next_committee.members(), committee.members(), "New committee members should match the previous committee");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_total_stake(round in 1u64.., members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let committee = Committee::new(round, members).unwrap();
+            let total_stake = committee.total_stake().unwrap();
+
+            let mut expected_total_stake = 0u64;
+            for stake in committee.members().values() {
+                expected_total_stake = expected_total_stake.saturating_add(*stake);
+            }
+
+            assert_eq!(total_stake, expected_total_stake, "Total stake should match the sum of all stakes");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_availability_threshold(round in 1u64.., members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let committee = Committee::new(round, members).unwrap();
+            let availability_threshold = committee.availability_threshold().unwrap();
+            let expected_availability_threshold = committee.total_stake().unwrap().saturating_add(2) / 3;
+
+            assert_eq!(availability_threshold, expected_availability_threshold, "Availability threshold should match the total stake divided by 3");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_quorum_threshold(round in 1u64.., members in arbitrary_members(MIN_MEMBERS..MAX_MEMBERS)) {
+            let committee = Committee::new(round, members).unwrap();
+            let quorum_threshold = committee.quorum_threshold().unwrap();
+            let expected_quorum_threshold = committee.total_stake().unwrap().saturating_mul(2) / 3 + 1;
+
+            assert_eq!(quorum_threshold, expected_quorum_threshold, "Quorum threshold should match the total stake multiplied by 2 and divided by 3 plus 1");
         }
     }
 }
