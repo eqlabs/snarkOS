@@ -27,5 +27,5 @@ fi
 # Compute the size of network
 NUM_NODES=$(cat $PEER_FILE_PATH | wc -l)
 
-echo "Running: ./simple_node bft $NODE_ID $NUM_NODES $PEER_FILE_PATH"
-./simple_node bft "$NODE_ID" "$NUM_NODES" "$PEER_FILE_PATH"
+echo "Running: ./simple_node --mode bft --id $NODE_ID --num-nodes $NUM_NODES --peers $PEER_FILE_PATH"
+./simple_node --mode bft --id "$NODE_ID" --num-nodes "$NUM_NODES" --peers "$PEER_FILE_PATH"
