@@ -39,7 +39,7 @@ use snarkvm::{
 };
 
 use ::bytes::Bytes;
-use anyhow::{anyhow, ensure, Error, Result};
+use anyhow::{anyhow, bail, ensure, Context, Error, Result};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -51,7 +51,13 @@ use axum_extra::response::ErasedJson;
 use clap::{Parser, ValueEnum};
 use indexmap::IndexMap;
 use rand::{Rng, SeedableRng};
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+};
 use tokio::sync::oneshot;
 use tracing_subscriber::{
     layer::{Layer, SubscriberExt},
@@ -447,12 +453,37 @@ struct Args {
 fn parse_peers(peers_string: String) -> Result<HashMap<u16, SocketAddr>, Error> {
     // Expect list of peers in the form of `node_id=ip:port`, one per line.
     let mut peers = HashMap::new();
+    fn convert_unspecified_to_loopback(socket_addr: &SocketAddr) -> SocketAddr {
+        if !socket_addr.ip().is_unspecified() {
+            return *socket_addr;
+        }
+        if socket_addr.is_ipv4() {
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), socket_addr.port())
+        } else {
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), socket_addr.port())
+        }
+    }
+
     for peer in peers_string.lines() {
         let mut split = peer.split('=');
         let node_id = u16::from_str(split.next().ok_or_else(|| anyhow!("Bad Format"))?)?;
         let addr: String = split.next().ok_or_else(|| anyhow!("Bad Format"))?.parse()?;
-        let ip = SocketAddr::from_str(addr.as_str())?;
-        peers.insert(node_id, ip);
+        let resolved_addrs: Vec<SocketAddr> = addr.to_socket_addrs().unwrap().collect();
+        let ip = {
+            if resolved_addrs.len() > 1 {
+                debug!("{addr} resolved to multiple SocketAddrs ({resolved_addrs:?}), choosing first");
+            }
+            // choose the first and map unspecified (i.e. 0.0.0.0) to loopbacks
+            resolved_addrs.first().map(convert_unspecified_to_loopback)
+        };
+        match ip {
+            Some(ip) => {
+                peers.insert(node_id, ip);
+            }
+            None => {
+                bail!("Unable to resolve peer address: {addr}");
+            }
+        };
     }
     Ok(peers)
 }
@@ -466,7 +497,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let peers = match args.peers {
-        Some(path) => parse_peers(std::fs::read_to_string(path)?)?,
+        Some(path) => parse_peers(
+            std::fs::read_to_string(&path).with_context(|| format!("Failed to read file {:?}", path.as_path()))?,
+        )
+        .with_context(|| "Failed to parse peers")?,
         None => Default::default(),
     };
 
@@ -517,6 +551,7 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::IpAddr;
 
     #[test]
     fn parse_peers_empty() -> Result<(), Error> {
@@ -533,6 +568,18 @@ mod tests {
 3=192.168.1.176:5003"#;
         let peers = parse_peers(s.to_owned())?;
         assert_eq!(peers.len(), 4);
+        Ok(())
+    }
+
+    #[test]
+    fn parse_name_resolution_ok() -> Result<(), Error> {
+        let s = r#"0=localhost:5000
+1=localhost:5001"#;
+        let peers = parse_peers(s.to_owned())?;
+        assert_eq!(peers.len(), 2);
+        // TODO does the localhost resolution always return IPv6 in modern OSes?
+        assert_eq!(peers.get(&0u16), Some(&SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 5000)));
+        assert_eq!(peers.get(&1u16), Some(&SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 5001)));
         Ok(())
     }
 
