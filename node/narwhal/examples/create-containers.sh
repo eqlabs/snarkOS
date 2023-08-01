@@ -57,13 +57,24 @@ do
     PEER_HOST_OPTIONS+=" --add-host ${peer_name}:${ip_address}"
 done
 
+# Heaptracked peer
+HEAPTRACK_PEER="${HEAPTRACK:-}"
+
 # Loop through the COMMITTEE_SIZE peers and create containers
 for ((i=0; i<COMMITTEE_SIZE; i++))
 do
     peer_name="peer$i"
     # 172.16.0.1 is reserved for the gateway, let's skip that
     ip_address="172.16.0.$((i+2))"
-    command="$CONTAINER_RUNTIME create --network devnet $PEER_HOST_OPTIONS $VOLUME_OPTIONS --ip=$ip_address --hostname=$peer_name --name=$peer_name $IMAGE_NAME"
+    env_vars=""
+
+    if [ "$peer_name" = "${HEAPTRACK_PEER}" ]; then
+        # The value of variable doesn't currently matter, as long as it exists
+        env_vars+="--env 'HEAPTRACK=y'"
+    fi
+    
+    # TODO Pass the arguments of this script to the creation command for more flexibility
+    command="$CONTAINER_RUNTIME create --network devnet $env_vars $PEER_HOST_OPTIONS $VOLUME_OPTIONS --ip=$ip_address --hostname=$peer_name --name=$peer_name $IMAGE_NAME --fire-transmissions"
     container_id=$(eval "$command")
     echo "Created $peer_name @ $ip_address -> $container_id"
 done

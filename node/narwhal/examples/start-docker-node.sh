@@ -26,6 +26,12 @@ fi
 
 # Compute the size of network
 NUM_NODES=$(cat $PEER_FILE_PATH | wc -l)
-
-echo "Running: ./simple_node --mode bft --id $NODE_ID --num-nodes $NUM_NODES --peers $PEER_FILE_PATH"
-./simple_node --mode bft --id "$NODE_ID" --num-nodes "$NUM_NODES" --peers "$PEER_FILE_PATH"
+ARGS="$@"
+# Run the simple_node with heaptrack if HEAPTRACK env var is set
+if [[ -n ${HEAPTRACK:-} ]]; then
+    echo "Running: /usr/bin/heaptrack ./simple_node --mode bft --id $NODE_ID --num-nodes $NUM_NODES --peers $PEER_FILE_PATH $ARGS"
+    /usr/bin/heaptrack ./simple_node --mode bft --id "$NODE_ID" --num-nodes "$NUM_NODES" --peers "$PEER_FILE_PATH" "$ARGS"
+else
+    echo "Running: ./simple_node --mode bft --id $NODE_ID --num-nodes $NUM_NODES --peers $PEER_FILE_PATH $ARGS"
+    ./simple_node --mode bft --id "$NODE_ID" --num-nodes "$NUM_NODES" --peers "$PEER_FILE_PATH" "$ARGS"
+fi
