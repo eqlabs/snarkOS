@@ -24,12 +24,16 @@ ADD Cargo.lock ./Cargo.lock
 ADD Cargo.toml ./Cargo.toml
 ADD .integration ./.integration
 
-RUN cargo build --release --package snarkos-node-narwhal --example simple_node
+RUN cargo build --release --package snarkos-node-narwhal --example simple_node && \
+    mv target/release/examples/simple_node . && \
+    rm -rf target
 
 FROM rust:slim
 
+RUN apt-get update && apt-get install -y heaptrack
+
 WORKDIR /simple_node
-COPY --from=builder /simple_node/target/release/examples/simple_node .
+COPY --from=builder /simple_node/simple_node .
 COPY --from=builder --chmod=100 /simple_node/node/narwhal/examples/start-docker-node.sh .
 
 EXPOSE 5000 3000
