@@ -34,7 +34,8 @@ RUN apt-get update && apt-get install -y heaptrack
 
 WORKDIR /simple_node
 COPY --from=builder /simple_node/simple_node .
-COPY --from=builder --chmod=100 /simple_node/node/narwhal/examples/start-docker-node.sh .
+COPY --from=builder /simple_node/node/narwhal/examples/start-docker-node.sh .
+RUN chmod 100 start-docker-node.sh
 
 EXPOSE 5000 3000
 ENTRYPOINT ["./start-docker-node.sh"]
