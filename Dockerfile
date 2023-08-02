@@ -24,8 +24,8 @@ ADD Cargo.lock ./Cargo.lock
 ADD Cargo.toml ./Cargo.toml
 ADD .integration ./.integration
 
-RUN cargo build --release --package snarkos-node-narwhal --example simple_node && \
-    mv target/release/examples/simple_node . && \
+RUN cargo build --profile release-devnet --package snarkos-node-narwhal --example simple_node && \
+    mv target/release-devnet/examples/simple_node . && \
     rm -rf target
 
 FROM rust:slim

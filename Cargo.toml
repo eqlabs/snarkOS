@@ -140,3 +140,8 @@ lto = "thin"
 incremental = true
 debug = true
 debug-assertions = true
+
+[profile.release-devnet]
+inherits = "release"
+incremental = false
+debug = true
