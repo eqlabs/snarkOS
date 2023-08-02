@@ -16,6 +16,13 @@ categories = [ "cryptography", "operating-systems" ]
 license = "Apache-2.0"
 edition = "2021"
 
+[features]
+jemalloc = [ "tikv-jemallocator" ]
+
+[dependencies.tikv-jemallocator]
+version = "0.5"
+optional = true
+
 [dependencies.anyhow]
 version = "1.0.70"
 

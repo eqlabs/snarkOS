@@ -68,6 +68,13 @@ type CurrentNetwork = snarkvm::prelude::Testnet3;
 
 /**************************************************************************************************/
 
+#[cfg(feature = "jemalloc")]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(feature = "jemalloc")]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 /// Initializes the logger.
 pub fn initialize_logger(verbosity: u8) {
     match verbosity {

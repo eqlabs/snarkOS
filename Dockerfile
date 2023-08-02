@@ -25,7 +25,9 @@ ADD Cargo.toml ./Cargo.toml
 ADD .integration ./.integration
 
 RUN cargo build --profile release-devnet --package snarkos-node-narwhal --example simple_node && \
-    mv target/release-devnet/examples/simple_node . && \
+    cp target/release-devnet/examples/simple_node . &&  \
+    cargo build --profile release-devnet --features jemalloc --package snarkos-node-narwhal --example simple_node && \
+    cp target/release-devnet/examples/simple_node simple_node_jemalloc && \
     rm -rf target
 
 FROM rust:slim
@@ -34,6 +36,7 @@ RUN apt-get update && apt-get install -y heaptrack
 
 WORKDIR /simple_node
 COPY --from=builder /simple_node/simple_node .
+COPY --from=builder /simple_node/simple_node_jemalloc .
 COPY --from=builder /simple_node/node/narwhal/examples/start-docker-node.sh .
 RUN chmod 100 start-docker-node.sh
 

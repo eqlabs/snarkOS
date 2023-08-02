@@ -3174,6 +3174,7 @@ dependencies = [
  "snarkvm",
  "snow",
  "test-strategy",
+ "tikv-jemallocator",
  "time",
  "tokio",
  "tokio-stream",

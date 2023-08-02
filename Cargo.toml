@@ -143,5 +143,4 @@ debug-assertions = true
 
 [profile.release-devnet]
 inherits = "release"
-incremental = false
 debug = true

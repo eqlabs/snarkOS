@@ -59,6 +59,7 @@ done
 
 # Heaptracked peer
 HEAPTRACK_PEER="${HEAPTRACK:-}"
+JEMALLOC_PEER="${JEMALLOC:-}"
 
 # Loop through the COMMITTEE_SIZE peers and create containers
 for ((i=0; i<COMMITTEE_SIZE; i++))
@@ -70,7 +71,12 @@ do
 
     if [ "$peer_name" = "${HEAPTRACK_PEER}" ]; then
         # The value of variable doesn't currently matter, as long as it exists
-        env_vars+="--env 'HEAPTRACK=y'"
+        env_vars+=" --env 'HEAPTRACK=y'"
+    fi
+
+    if [ "$peer_name" = "${JEMALLOC_PEER}" ]; then
+        # The value of variable doesn't currently matter, as long as it exists
+        env_vars+=" --env 'JEMALLOC=y'"
     fi
     
     # TODO Pass the arguments of this script to the creation command for more flexibility
