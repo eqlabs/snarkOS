@@ -159,13 +159,10 @@ mod tests {
         dag.insert(certificate.clone());
         assert!(dag.contains_certificate_in_round(ROUND, certificate.certificate_id()));
         assert_eq!(dag.get_certificate_for_round_with_author(ROUND, certificate.author()), Some(&certificate));
+        assert_eq!(dag.get_certificate_for_round_with_id(ROUND, certificate.certificate_id()), Some(&certificate));
         assert_eq!(
-            dag.get_certificate_for_round_with_id(ROUND, certificate.certificate_id()).cloned(),
-            Some(certificate.clone())
-        );
-        assert_eq!(
-            dag.get_certificates_for_round(ROUND).cloned(),
-            Some(vec![(certificate.author(), certificate)].into_iter().collect())
+            dag.get_certificates_for_round(ROUND),
+            Some(&vec![(certificate.author(), certificate)].into_iter().collect())
         );
         assert_eq!(dag.last_committed_round(), 0);
         assert_eq!(dag.last_committed_authors().len(), 0);
@@ -184,13 +181,10 @@ mod tests {
         dag.insert(certificate_2.clone());
         assert!(dag.contains_certificate_in_round(2, certificate_2.certificate_id()));
         assert_eq!(dag.get_certificate_for_round_with_author(2, certificate_2.author()), Some(&certificate_2));
+        assert_eq!(dag.get_certificate_for_round_with_id(2, certificate_2.certificate_id()), Some(&certificate_2));
         assert_eq!(
-            dag.get_certificate_for_round_with_id(2, certificate_2.certificate_id()).cloned(),
-            Some(certificate_2.clone())
-        );
-        assert_eq!(
-            dag.get_certificates_for_round(2).cloned(),
-            Some(vec![(certificate_2.author(), certificate_2.clone())].into_iter().collect())
+            dag.get_certificates_for_round(2),
+            Some(&vec![(certificate_2.author(), certificate_2.clone())].into_iter().collect())
         );
         assert_eq!(dag.last_committed_round(), 0);
         assert_eq!(dag.last_committed_authors().len(), 0);
@@ -199,13 +193,10 @@ mod tests {
         dag.insert(certificate_3.clone());
         assert!(dag.contains_certificate_in_round(3, certificate_3.certificate_id()));
         assert_eq!(dag.get_certificate_for_round_with_author(3, certificate_3.author()), Some(&certificate_3));
+        assert_eq!(dag.get_certificate_for_round_with_id(3, certificate_3.certificate_id()), Some(&certificate_3));
         assert_eq!(
-            dag.get_certificate_for_round_with_id(3, certificate_3.certificate_id()).cloned(),
-            Some(certificate_3.clone())
-        );
-        assert_eq!(
-            dag.get_certificates_for_round(3).cloned(),
-            Some(vec![(certificate_3.author(), certificate_3.clone())].into_iter().collect())
+            dag.get_certificates_for_round(3),
+            Some(&vec![(certificate_3.author(), certificate_3.clone())].into_iter().collect())
         );
         assert_eq!(dag.last_committed_round(), 0);
         assert_eq!(dag.last_committed_authors().len(), 0);
