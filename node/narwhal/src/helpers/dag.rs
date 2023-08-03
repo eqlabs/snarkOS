@@ -66,8 +66,12 @@ impl<N: Network> DAG<N> {
     }
 
     /// Returns the batch certificate for the given round and author.
-    pub fn get_certificate_for_round_with_author(&self, round: u64, author: Address<N>) -> Option<BatchCertificate<N>> {
-        self.graph.get(&round).and_then(|certificates| certificates.get(&author)).cloned()
+    pub fn get_certificate_for_round_with_author(
+        &self,
+        round: u64,
+        author: Address<N>,
+    ) -> Option<&BatchCertificate<N>> {
+        self.graph.get(&round).and_then(|certificates| certificates.get(&author))
     }
 
     /// Returns the batch certificate for the given round and certificate ID.
@@ -154,7 +158,7 @@ mod tests {
         let certificate = sample_batch_certificate_for_round(ROUND, rng);
         dag.insert(certificate.clone());
         assert!(dag.contains_certificate_in_round(ROUND, certificate.certificate_id()));
-        assert_eq!(dag.get_certificate_for_round_with_author(ROUND, certificate.author()), Some(certificate.clone()));
+        assert_eq!(dag.get_certificate_for_round_with_author(ROUND, certificate.author()), Some(&certificate));
         assert_eq!(
             dag.get_certificate_for_round_with_id(ROUND, certificate.certificate_id()).cloned(),
             Some(certificate.clone())
@@ -179,7 +183,7 @@ mod tests {
         // Insert the certificate for round 2.
         dag.insert(certificate_2.clone());
         assert!(dag.contains_certificate_in_round(2, certificate_2.certificate_id()));
-        assert_eq!(dag.get_certificate_for_round_with_author(2, certificate_2.author()), Some(certificate_2.clone()));
+        assert_eq!(dag.get_certificate_for_round_with_author(2, certificate_2.author()), Some(&certificate_2));
         assert_eq!(
             dag.get_certificate_for_round_with_id(2, certificate_2.certificate_id()).cloned(),
             Some(certificate_2.clone())
@@ -194,7 +198,7 @@ mod tests {
         // Insert the certificate for round 3.
         dag.insert(certificate_3.clone());
         assert!(dag.contains_certificate_in_round(3, certificate_3.certificate_id()));
-        assert_eq!(dag.get_certificate_for_round_with_author(3, certificate_3.author()), Some(certificate_3.clone()));
+        assert_eq!(dag.get_certificate_for_round_with_author(3, certificate_3.author()), Some(&certificate_3));
         assert_eq!(
             dag.get_certificate_for_round_with_id(3, certificate_3.certificate_id()).cloned(),
             Some(certificate_3.clone())
