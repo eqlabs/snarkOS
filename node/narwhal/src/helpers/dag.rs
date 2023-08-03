@@ -83,8 +83,8 @@ impl<N: Network> DAG<N> {
     }
 
     /// Returns the batch certificates for the given round.
-    pub fn get_certificates_for_round(&self, round: u64) -> Option<HashMap<Address<N>, BatchCertificate<N>>> {
-        self.graph.get(&round).cloned()
+    pub fn get_certificates_for_round(&self, round: u64) -> Option<&HashMap<Address<N>, BatchCertificate<N>>> {
+        self.graph.get(&round)
     }
 
     /// Inserts a certificate into the DAG.
@@ -161,7 +161,7 @@ mod tests {
             Some(certificate.clone())
         );
         assert_eq!(
-            dag.get_certificates_for_round(ROUND),
+            dag.get_certificates_for_round(ROUND).cloned(),
             Some(vec![(certificate.author(), certificate)].into_iter().collect())
         );
         assert_eq!(dag.last_committed_round(), 0);
@@ -186,7 +186,7 @@ mod tests {
             Some(certificate_2.clone())
         );
         assert_eq!(
-            dag.get_certificates_for_round(2),
+            dag.get_certificates_for_round(2).cloned(),
             Some(vec![(certificate_2.author(), certificate_2.clone())].into_iter().collect())
         );
         assert_eq!(dag.last_committed_round(), 0);
@@ -201,7 +201,7 @@ mod tests {
             Some(certificate_3.clone())
         );
         assert_eq!(
-            dag.get_certificates_for_round(3),
+            dag.get_certificates_for_round(3).cloned(),
             Some(vec![(certificate_3.author(), certificate_3.clone())].into_iter().collect())
         );
         assert_eq!(dag.last_committed_round(), 0);

@@ -356,64 +356,69 @@ impl<N: Network> BFT<N> {
         if commit_round % 2 != 1 {
             return Ok(());
         }
-        // If the commit round is at or below the last committed round, return early.
-        if commit_round <= self.dag.read().last_committed_round() {
-            return Ok(());
-        }
 
-        // Retrieve the committee for the commit round.
-        let Some(committee) = self.storage().get_committee(commit_round) else {
-            bail!("BFT failed to retrieve the committee for commit round {commit_round}");
-        };
-        // Compute the leader for the commit round.
-        let Ok(leader) = committee.get_leader() else {
-            bail!("BFT failed to compute the leader for commit round {commit_round}");
-        };
-        // Retrieve the leader certificate for the commit round.
-        let Some(leader_certificate) = self.dag.read().get_certificate_for_round_with_author(commit_round, leader)
-        else {
-            trace!("BFT did not find the leader certificate for commit round {commit_round} yet");
-            return Ok(());
-        };
-        // Retrieve all of the certificates for the **certificate** round.
-        let Some(certificates) = self.dag.read().get_certificates_for_round(certificate_round) else {
-            // TODO (howardwu): Investigate how many certificates we should have at this point.
-            bail!("BFT failed to retrieve the certificates for certificate round {certificate_round}");
-        };
-        // Construct a set over the authors who included the leader's certificate in the certificate round.
-        let authors = certificates
-            .values()
-            .filter_map(|c| match c.previous_certificate_ids().contains(&leader_certificate.certificate_id()) {
-                true => Some(c.author()),
-                false => None,
-            })
-            .collect();
-        // Check if the leader is ready to be committed.
-        if !committee.is_availability_threshold_reached(&authors) {
-            // If the leader is not ready to be committed, return early.
-            trace!("BFT is not ready to commit {commit_round}");
-            return Ok(());
-        }
-
-        /* Proceeding to commit the leader. */
-
-        // Order all previous leader certificates since the last committed round.
-        let mut leader_certificates = vec![leader_certificate.clone()];
-        let mut current_certificate = leader_certificate;
-        for round in (self.dag.read().last_committed_round() + 2..=commit_round.saturating_sub(2)).rev().step_by(2) {
-            // Retrieve the previous leader certificate.
-            let Some(previous_certificate) = self.dag.read().get_certificate_for_round_with_author(round, leader)
-            else {
-                continue;
-            };
-            // Determine if there is a path between the previous certificate and the current certificate.
-            if self.is_linked(previous_certificate.clone(), current_certificate.clone())? {
-                // Add the previous leader certificate to the list of certificates to commit.
-                leader_certificates.push(previous_certificate.clone());
-                // Update the current certificate to the previous leader certificate.
-                current_certificate = previous_certificate;
+        let leader_certificates = {
+            let dag = self.dag.read();
+            // If the commit round is at or below the last committed round, return early.
+            if commit_round <= dag.last_committed_round() {
+                return Ok(());
             }
-        }
+
+            // Retrieve the committee for the commit round.
+            let Some(committee) = self.storage().get_committee(commit_round) else {
+                bail!("BFT failed to retrieve the committee for commit round {commit_round}");
+            };
+            // Compute the leader for the commit round.
+            let Ok(leader) = committee.get_leader() else {
+                bail!("BFT failed to compute the leader for commit round {commit_round}");
+            };
+            // Retrieve the leader certificate for the commit round.
+            let Some(leader_certificate) = dag.get_certificate_for_round_with_author(commit_round, leader)
+                else {
+                    trace!("BFT did not find the leader certificate for commit round {commit_round} yet");
+                    return Ok(());
+                };
+            // Retrieve all of the certificates for the **certificate** round.
+            let Some(certificates) = dag.get_certificates_for_round(certificate_round) else {
+                // TODO (howardwu): Investigate how many certificates we should have at this point.
+                bail!("BFT failed to retrieve the certificates for certificate round {certificate_round}");
+            };
+            // Construct a set over the authors who included the leader's certificate in the certificate round.
+            let authors = certificates
+                .values()
+                .filter_map(|c| match c.previous_certificate_ids().contains(&leader_certificate.certificate_id()) {
+                    true => Some(c.author()),
+                    false => None,
+                })
+                .collect();
+            // Check if the leader is ready to be committed.
+            if !committee.is_availability_threshold_reached(&authors) {
+                // If the leader is not ready to be committed, return early.
+                trace!("BFT is not ready to commit {commit_round}");
+                return Ok(());
+            }
+
+            /* Proceeding to commit the leader. */
+
+            // Order all previous leader certificates since the last committed round.
+            let mut leader_certificates = vec![leader_certificate.clone()];
+            let mut current_certificate = leader_certificate;
+            for round in (dag.last_committed_round() + 2..=commit_round.saturating_sub(2)).rev().step_by(2) {
+                // Retrieve the previous leader certificate.
+                let Some(previous_certificate) = dag.get_certificate_for_round_with_author(round, leader)
+                    else {
+                        continue;
+                    };
+                // Determine if there is a path between the previous certificate and the current certificate.
+                if self.is_linked(&previous_certificate, &current_certificate)? {
+                    // Add the previous leader certificate to the list of certificates to commit.
+                    leader_certificates.push(previous_certificate.clone());
+                    // Update the current certificate to the previous leader certificate.
+                    current_certificate = previous_certificate;
+                }
+            }
+            leader_certificates
+        };
 
         // Iterate over the leader certificates to commit.
         for leader_certificate in leader_certificates.into_iter().rev() {
@@ -516,22 +521,27 @@ impl<N: Network> BFT<N> {
     /// Returns `true` if there is a path from the previous certificate to the current certificate.
     fn is_linked(
         &self,
-        previous_certificate: BatchCertificate<N>,
-        current_certificate: BatchCertificate<N>,
+        previous_certificate: &BatchCertificate<N>,
+        current_certificate: &BatchCertificate<N>,
     ) -> Result<bool> {
         // Initialize the list containing the traversal.
-        let mut traversal = vec![current_certificate.clone()];
+        let mut traversal = vec![current_certificate];
+
+        // get the read access before going into loop
+        let dag = self.dag.read();
+
         // Iterate over the rounds from the current certificate to the previous certificate.
         for round in (previous_certificate.round()..current_certificate.round()).rev() {
             // Retrieve all of the certificates for this past round.
-            let Some(certificates) = self.dag.read().get_certificates_for_round(round) else {
+            let Some(certificates) = dag.get_certificates_for_round(round) else {
                 // This is a critical error, as the traversal should have these certificates.
                 // If this error is hit, it is likely that the maximum GC rounds should be increased.
                 bail!("BFT failed to retrieve the certificates for past round {round}");
             };
             // Filter the certificates to only include those that are in the traversal.
             traversal = certificates
-                .into_values()
+                .iter()
+                .map(|(_, value)| value)
                 .filter(|c| traversal.iter().any(|p| c.previous_certificate_ids().contains(&p.certificate_id())))
                 .collect();
         }
