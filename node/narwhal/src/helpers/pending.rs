@@ -88,7 +88,7 @@ impl<T: Copy + Clone + PartialEq + Eq + Hash, V: Clone> Pending<T, V> {
     /// Removes the specified `item` from the pending queue.
     /// If the `item` exists and is removed, the peer IPs are returned.
     /// If the `item` does not exist, `None` is returned.
-    pub fn remove(&self, item: impl Into<T>, callback_value: Option<V>) -> Option<HashSet<SocketAddr>> {
+    pub fn remove(&self, item: impl Into<T>, callback_value: Option<&V>) -> Option<HashSet<SocketAddr>> {
         let item = item.into();
         // Remove the item from the pending queue.
         let result = self.pending.write().remove(&item);

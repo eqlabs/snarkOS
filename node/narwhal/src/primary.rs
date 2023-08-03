@@ -1024,7 +1024,7 @@ impl<N: Network> Primary<N> {
         if exists {
             // TODO: Validate the certificate.
             // Remove the certificate ID from the pending queue.
-            self.pending.remove(certificate.certificate_id(), Some(certificate));
+            self.pending.remove(certificate.certificate_id(), Some(&certificate));
         }
     }
 

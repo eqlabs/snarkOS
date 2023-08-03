@@ -292,7 +292,7 @@ impl<N: Network> Worker<N> {
         // Construct the transmission.
         let transmission = Transmission::Solution(prover_solution.clone());
         // Remove the puzzle commitment from the pending queue.
-        self.pending.remove(puzzle_commitment, Some(transmission.clone()));
+        self.pending.remove(puzzle_commitment, Some(&transmission));
 
         // Check if the solution exists.
         if self.contains_transmission(puzzle_commitment) {
@@ -317,7 +317,7 @@ impl<N: Network> Worker<N> {
         // Construct the transmission.
         let transmission = Transmission::Transaction(transaction.clone());
         // Remove the transaction from the pending queue.
-        self.pending.remove(&transaction_id, Some(transmission.clone()));
+        self.pending.remove(&transaction_id, Some(&transmission));
 
         // Check if the transaction ID exists.
         if self.contains_transmission(&transaction_id) {
@@ -423,7 +423,7 @@ impl<N: Network> Worker<N> {
             // TODO (howardwu): Deserialize the transmission, and ensure it matches the transmission ID.
             //  Note: This is difficult for testing and example purposes, since those transmissions are fake.
             // Remove the transmission ID from the pending queue.
-            self.pending.remove(transmission_id, Some(transmission));
+            self.pending.remove(transmission_id, Some(&transmission));
         }
     }
 
