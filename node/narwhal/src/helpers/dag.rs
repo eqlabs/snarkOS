@@ -75,11 +75,10 @@ impl<N: Network> DAG<N> {
         &self,
         round: u64,
         certificate_id: Field<N>,
-    ) -> Option<BatchCertificate<N>> {
+    ) -> Option<&BatchCertificate<N>> {
         self.graph
             .get(&round)
             .and_then(|map| map.values().find(|certificate| certificate.certificate_id() == certificate_id))
-            .cloned()
     }
 
     /// Returns the batch certificates for the given round.
@@ -96,7 +95,7 @@ impl<N: Network> DAG<N> {
     }
 
     /// Commits a certificate, removing all certificates for this author at or before this round from the DAG.
-    pub fn commit(&mut self, certificate: BatchCertificate<N>, max_gc_rounds: u64) {
+    pub fn commit(&mut self, certificate: &BatchCertificate<N>, max_gc_rounds: u64) {
         let certificate_round = certificate.round();
         let author = certificate.author();
 
@@ -157,7 +156,7 @@ mod tests {
         assert!(dag.contains_certificate_in_round(ROUND, certificate.certificate_id()));
         assert_eq!(dag.get_certificate_for_round_with_author(ROUND, certificate.author()), Some(certificate.clone()));
         assert_eq!(
-            dag.get_certificate_for_round_with_id(ROUND, certificate.certificate_id()),
+            dag.get_certificate_for_round_with_id(ROUND, certificate.certificate_id()).cloned(),
             Some(certificate.clone())
         );
         assert_eq!(
@@ -182,7 +181,7 @@ mod tests {
         assert!(dag.contains_certificate_in_round(2, certificate_2.certificate_id()));
         assert_eq!(dag.get_certificate_for_round_with_author(2, certificate_2.author()), Some(certificate_2.clone()));
         assert_eq!(
-            dag.get_certificate_for_round_with_id(2, certificate_2.certificate_id()),
+            dag.get_certificate_for_round_with_id(2, certificate_2.certificate_id()).cloned(),
             Some(certificate_2.clone())
         );
         assert_eq!(
@@ -197,7 +196,7 @@ mod tests {
         assert!(dag.contains_certificate_in_round(3, certificate_3.certificate_id()));
         assert_eq!(dag.get_certificate_for_round_with_author(3, certificate_3.author()), Some(certificate_3.clone()));
         assert_eq!(
-            dag.get_certificate_for_round_with_id(3, certificate_3.certificate_id()),
+            dag.get_certificate_for_round_with_id(3, certificate_3.certificate_id()).cloned(),
             Some(certificate_3.clone())
         );
         assert_eq!(
@@ -216,7 +215,7 @@ mod tests {
         dag.insert(higher.clone());
 
         // Now commit the certificate for round 3, this will trigger GC.
-        dag.commit(certificate_3.clone(), 10);
+        dag.commit(&certificate_3, 10);
         assert!(!dag.contains_certificate_in_round(2, certificate_2.certificate_id()));
         assert!(!dag.contains_certificate_in_round(3, certificate_3.certificate_id()));
         assert!(dag.contains_certificate_in_round(2, lower.certificate_id()));

@@ -425,32 +425,39 @@ impl<N: Network> BFT<N> {
             // Retrieve the leader certificate round.
             let leader_round = leader_certificate.round();
             // Compute the commit subdag.
-            let commit_subdag = self.order_dag_with_dfs(leader_certificate);
+            let commit_subdag = self.order_dag_with_dfs(&leader_certificate);
             // Initialize a map for the deduped transmissions.
             let mut transmissions = IndexMap::new();
-            // Start from the oldest leader certificate.
-            for certificate in commit_subdag.values().flatten() {
-                // Update the DAG.
-                self.dag.write().commit(certificate.clone(), self.storage().max_gc_rounds());
-                // Retrieve the transmissions.
-                for transmission_id in certificate.transmission_ids() {
-                    // If the transmission already exists in the map, skip it.
-                    if transmissions.contains_key(transmission_id) {
-                        continue;
+
+            {
+                // get write lock before entering inner loop
+                let mut dag_write = self.dag.write();
+
+                // Start from the oldest leader certificate.
+                for certificate in commit_subdag.values().flatten() {
+                    // Update the DAG.
+                    dag_write.commit(certificate, self.storage().max_gc_rounds());
+                    // Retrieve the transmissions.
+                    for transmission_id in certificate.transmission_ids() {
+                        // If the transmission already exists in the map, skip it.
+                        if transmissions.contains_key(transmission_id) {
+                            continue;
+                        }
+                        // If the transmission already exists in the ledger, skip it.
+                        // Note: On failure to read from the ledger, we skip including this transmission, out of safety.
+                        if self.ledger().contains_transmission(transmission_id).unwrap_or(true) {
+                            continue;
+                        }
+                        // Retrieve the transmission.
+                        let Some(transmission) = self.storage().get_transmission(*transmission_id) else {
+                            bail!("BFT failed to retrieve transmission {}", fmt_id(transmission_id));
+                        };
+                        // Add the transmission to the set.
+                        transmissions.insert(*transmission_id, transmission);
                     }
-                    // If the transmission already exists in the ledger, skip it.
-                    // Note: On failure to read from the ledger, we skip including this transmission, out of safety.
-                    if self.ledger().contains_transmission(transmission_id).unwrap_or(true) {
-                        continue;
-                    }
-                    // Retrieve the transmission.
-                    let Some(transmission) = self.storage().get_transmission(*transmission_id) else {
-                        bail!("BFT failed to retrieve transmission {}", fmt_id(transmission_id));
-                    };
-                    // Add the transmission to the set.
-                    transmissions.insert(*transmission_id, transmission);
                 }
             }
+
             // Construct the subdag.
             let subdag = Subdag::from(commit_subdag)?;
             info!(
@@ -469,7 +476,7 @@ impl<N: Network> BFT<N> {
     /// Returns the certificates to commit.
     fn order_dag_with_dfs(
         &self,
-        leader_certificate: BatchCertificate<N>,
+        leader_certificate: &BatchCertificate<N>,
     ) -> BTreeMap<u64, IndexSet<BatchCertificate<N>>> {
         // Initialize a map for the certificates to commit.
         let mut commit = BTreeMap::<u64, IndexSet<_>>::new();
@@ -477,15 +484,17 @@ impl<N: Network> BFT<N> {
         let mut already_ordered = HashSet::new();
         // Initialize a buffer for the certificates to order.
         let mut buffer = vec![leader_certificate];
+
+        // get read access before entering the loop
+        let dag = self.dag.read();
+
         // Iterate over the certificates to order.
         while let Some(certificate) = buffer.pop() {
             // Insert the certificate into the map.
             commit.entry(certificate.round()).or_default().insert(certificate.clone());
             // Iterate over the previous certificate IDs.
             for previous_certificate_id in certificate.previous_certificate_ids() {
-                let Some(previous_certificate) = self
-                    .dag
-                    .read()
+                let Some(previous_certificate) = dag
                     .get_certificate_for_round_with_id(certificate.round() - 1, *previous_certificate_id)
                 else {
                     // It is either ordered or below the GC round.
@@ -496,9 +505,7 @@ impl<N: Network> BFT<N> {
                     continue;
                 }
                 // If the last committed round is the same as the previous certificate round for this author, continue.
-                if self
-                    .dag
-                    .read()
+                if dag
                     .last_committed_authors()
                     .get(&previous_certificate.author())
                     .map_or(false, |round| *round == previous_certificate.round())
