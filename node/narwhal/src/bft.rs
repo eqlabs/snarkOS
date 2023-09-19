@@ -195,7 +195,7 @@ impl<N: Network> BFT<N> {
         // Log the leader election.
         if current_round % 2 == 0 {
             if let Some(leader_certificate) = self.leader_certificate.read().as_ref() {
-                info!("\n\nRound {current_round} elected a leader - {}\n", leader_certificate.author());
+                info!("Round {current_round} elected a leader - {}", leader_certificate.author());
             }
         }
 
@@ -466,7 +466,7 @@ impl<N: Network> BFT<N> {
             // Construct the subdag.
             let subdag = Subdag::from(commit_subdag)?;
             info!(
-                "\n\nCommitting a subdag from round {leader_round} with {} transmissions: {:?}\n",
+                "Committing a subdag from round {leader_round} with {} transmissions: {:?}",
                 transmissions.len(),
                 subdag.iter().map(|(round, certificates)| (round, certificates.len())).collect::<Vec<_>>()
             );
