@@ -121,6 +121,41 @@ pub fn fire_unconfirmed_solutions(
 }
 
 /// Fires *fake* unconfirmed transactions at the node.
+pub fn fire_single_unconfirmed_transaction(sender: &PrimarySender<CurrentNetwork>, node_id: u16) -> JoinHandle<()> {
+    let tx_unconfirmed_transaction = sender.tx_unconfirmed_transaction.clone();
+    tokio::task::spawn(async move {
+        // This RNG samples the *same* fake transactions for all nodes.
+        let mut shared_rng = TestRng::fixed(123456789);
+        // This RNG samples *different* fake transactions for each node.
+        let mut unique_rng = TestRng::fixed(node_id as u64);
+
+        // A closure to generate an ID and transaction.
+        fn sample(
+            mut rng: impl Rng,
+        ) -> (<CurrentNetwork as Network>::TransactionID, Data<Transaction<CurrentNetwork>>) {
+            // Sample a random fake transaction ID.
+            let id = Field::<CurrentNetwork>::rand(&mut rng).into();
+            // Sample random fake transaction bytes.
+            let mut vec = vec![0u8; 1024];
+            rng.fill_bytes(&mut vec);
+            let transaction = Data::Buffer(Bytes::from(vec));
+            // Return the ID and transaction.
+            (id, transaction)
+        }
+
+        // Sample a random fake transaction ID and transaction.
+        let (id, transaction) = sample(&mut unique_rng);
+        // Initialize a callback sender and receiver.
+        let (callback, callback_receiver) = oneshot::channel();
+        // Send the fake transaction.
+        if let Err(e) = tx_unconfirmed_transaction.send((id, transaction, callback)).await {
+            error!("Failed to send unconfirmed transaction: {e}");
+        }
+        let _ = callback_receiver.await;
+    })
+}
+
+/// Fires *fake* unconfirmed transactions at the node.
 pub fn fire_unconfirmed_transactions(
     sender: &PrimarySender<CurrentNetwork>,
     node_id: u16,

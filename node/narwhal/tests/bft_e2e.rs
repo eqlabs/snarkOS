@@ -15,11 +15,15 @@
 #[allow(dead_code)]
 mod common;
 
-use crate::common::primary::{TestNetwork, TestNetworkConfig};
+use crate::common::{
+    primary::{TestNetwork, TestNetworkConfig},
+    CurrentNetwork,
+};
 use deadline::deadline;
 use itertools::Itertools;
 use snarkos_node_narwhal::MAX_BATCH_DELAY;
-use std::time::Duration;
+use snarkvm::prelude::{Address, Field};
+use std::{collections::HashSet, time::Duration};
 use tokio::time::sleep;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -94,6 +98,55 @@ async fn test_quorum_threshold() {
     // Check the nodes reach quorum and advance through the rounds.
     const TARGET_ROUND: u64 = 4;
     deadline!(Duration::from_secs(20), move || { network.is_round_reached(TARGET_ROUND) });
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_single_transaction() {
+    // Start N nodes but don't connect them.
+    const N: u16 = 4;
+
+    let mut network = TestNetwork::new(TestNetworkConfig {
+        num_nodes: N,
+        bft: true,
+        connect_all: false,
+        fire_transmissions: None,
+        // Set this to Some(0..=4) to see the logs.
+        log_level: Some(4),
+        log_connections: true,
+    });
+    network.start().await;
+
+    // Check each node is at round 1 (0 is genesis).
+    for validators in network.validators.values() {
+        assert_eq!(validators.primary.current_round(), 1);
+    }
+
+    // Connect all nodes
+    network.connect_all().await;
+    // Start the cannons for node 0.
+    network.fire_single_transaction_at(0);
+
+    sleep(Duration::from_millis(MAX_BATCH_DELAY * 2)).await;
+    // Check the nodes reach quorum.
+    const TARGET_ROUND: u64 = 1;
+
+    let network_clone = network.clone();
+    deadline!(Duration::from_secs(20), move || { network_clone.is_round_reached(TARGET_ROUND + 1) });
+    let certificates = network.get_certificates_for_round(TARGET_ROUND);
+    assert_eq!(certificates.len(), 4);
+    let authors: HashSet<Address<CurrentNetwork>> =
+        certificates.iter().flatten().map(|x| x.author()).unique().collect();
+    let batch_data: Vec<(Field<CurrentNetwork>, usize)> = certificates
+        .iter()
+        .flatten()
+        .map(|x| (x.batch_id(), x.batch_header().transmission_ids().len()))
+        .unique()
+        .collect();
+    // assert_eq!(authors.len(), 1, "Unexpected certificates: {certificates:?}");
+    assert_eq!(authors.contains(&network.validators.get(&0).unwrap().primary.gateway().account().address()), true);
+    assert_eq!(batch_data.into_iter().map(|(_, transmission_count)| transmission_count).unique().collect_vec(), vec![
+        1
+    ]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

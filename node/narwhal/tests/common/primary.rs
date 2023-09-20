@@ -37,9 +37,11 @@ use std::{
     time::Duration,
 };
 
-use indexmap::IndexMap;
+use crate::common::utils::fire_single_unconfirmed_transaction;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use parking_lot::Mutex;
+use snarkvm::prelude::narwhal::BatchCertificate;
 use tokio::{task::JoinHandle, time::sleep};
 use tracing::*;
 
@@ -86,6 +88,12 @@ pub struct TestValidator {
 }
 
 impl TestValidator {
+    pub fn fire_single_transaction(&mut self) {
+        let transaction_handle = fire_single_unconfirmed_transaction(self.primary_sender.as_mut().unwrap(), self.id);
+
+        self.handles.lock().push(transaction_handle);
+    }
+
     pub fn fire_transmissions(&mut self, interval_ms: u64) {
         let solution_handle = fire_unconfirmed_solutions(self.primary_sender.as_mut().unwrap(), self.id, interval_ms);
         let transaction_handle =
@@ -181,6 +189,10 @@ impl TestNetwork {
         self.validators.get_mut(&id).unwrap().fire_transmissions(interval_ms);
     }
 
+    pub fn fire_single_transaction_at(&mut self, id: u16) {
+        self.validators.get_mut(&id).unwrap().fire_single_transaction();
+    }
+
     // Connects a node to another node.
     pub async fn connect_validators(&self, first_id: u16, second_id: u16) {
         let first_validator = self.validators.get(&first_id).unwrap();
@@ -224,6 +236,14 @@ impl TestNetwork {
         let halt_round = self.validators.values().map(|v| v.primary.current_round()).max().unwrap();
         sleep(Duration::from_millis(MAX_BATCH_DELAY * 2)).await;
         self.validators.values().all(|v| v.primary.current_round() <= halt_round)
+    }
+
+    // Checks if at least 2f + 1 nodes have reached the given round.
+    pub fn get_certificates_for_round(&self, round: u64) -> Vec<Vec<BatchCertificate<CurrentNetwork>>> {
+        self.validators
+            .values()
+            .map(|v| v.primary.storage().get_certificates_for_round(round).iter().cloned().collect())
+            .collect()
     }
 
     // Checks if the committee is coherent in storage for all nodes (not quorum) over a range of
