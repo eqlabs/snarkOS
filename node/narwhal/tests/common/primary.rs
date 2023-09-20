@@ -215,7 +215,7 @@ impl TestNetwork {
 
     // Checks if at least 2f + 1 nodes have reached the given round.
     pub fn is_round_reached(&self, round: u64) -> bool {
-        let quorum_threshold = self.validators.len() / 2 + 1;
+        let quorum_threshold = self.validators.len() * 2 / 3 + 1;
         self.validators.values().filter(|v| v.primary.current_round() >= round).count() >= quorum_threshold
     }
 
