@@ -86,6 +86,14 @@ pub struct Start {
     #[clap(long = "narwhal")]
     pub narwhal: Option<SocketAddr>,
 
+    /// Specify the IP address and port of the validator(s) to connect to
+    #[clap(default_value = "", long = "validators_file")]
+    pub validators_file: Option<PathBuf>,
+
+    /// Specify the IP address and port of the validator(s) to connect to
+    #[clap(default_value = "", long = "peers_file")]
+    pub peers_file: Option<PathBuf>,
+
     /// Specify the IP address and port for the REST server
     #[clap(default_value = "0.0.0.0:3033", long = "rest")]
     pub rest: SocketAddr,
@@ -159,6 +167,18 @@ impl Start {
                 })
                 .collect()),
         }
+    }
+
+    fn parse_file(&self, filename: PathBuf) -> Result<Vec<SocketAddr>> {
+        let file = std::fs::read_to_string(filename)?;
+        let mut peers = vec![];
+        for peer in file.split('\n') {
+            if peer.is_empty() {
+                continue;
+            }
+            peers.push(SocketAddr::from_str(peer)?);
+        }
+        Ok(peers)
     }
 
     /// Returns the initial validator(s) to connect to, from the given configurations.
@@ -340,8 +360,24 @@ impl Start {
 
         // Parse the trusted peers to connect to.
         let mut trusted_peers = self.parse_trusted_peers()?;
+        if trusted_peers.is_empty() {
+            if let Some(peers_file) = &self.peers_file {
+                trusted_peers = self.parse_file(peers_file.clone())?;
+                if let Some(dev) = self.dev {
+                    // Remove ourselves out of the peers list so we don't self-connect.
+                    trusted_peers.remove(dev as usize);
+                }
+            }
+        }
+        println!("Trusted peers: {:?}", trusted_peers);
         // Parse the trusted validators to connect to.
         let mut trusted_validators = self.parse_trusted_validators()?;
+        if trusted_validators.is_empty() {
+            if let Some(validators_file) = &self.validators_file {
+                trusted_validators = self.parse_file(validators_file.clone())?;
+            }
+        }
+        println!("Trusted validators: {:?}", trusted_validators);
         // Parse the development configurations.
         self.parse_development::<N>(&mut trusted_peers, &mut trusted_validators)?;
 
