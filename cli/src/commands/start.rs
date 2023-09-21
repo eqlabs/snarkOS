@@ -46,7 +46,7 @@ const RECOMMENDED_MIN_NOFILES_LIMIT: u64 = 2048;
 /// The development mode RNG seed.
 const DEVELOPMENT_MODE_RNG_SEED: u64 = 1234567890u64;
 /// The development mode number of validators.
-const DEVELOPMENT_MODE_NUM_VALIDATORS: u16 = 4;
+const DEVELOPMENT_MODE_DEFAULT_VALIDATORS: u16 = 4;
 
 /// Starts the snarkOS node.
 #[derive(Clone, Debug, Parser)]
@@ -248,7 +248,7 @@ impl Start {
 
             // To avoid ambiguity, we define the first few nodes to be the trusted validators to connect to.
             if trusted_validators.is_empty() {
-                for i in 0..DEVELOPMENT_MODE_NUM_VALIDATORS {
+                for i in 0..DEVELOPMENT_MODE_DEFAULT_VALIDATORS {
                     if i != dev {
                         trusted_validators.push(SocketAddr::from_str(&format!("127.0.0.1:{}", MEMORY_POOL_PORT + i))?);
                     }
@@ -274,14 +274,13 @@ impl Start {
 
     /// Returns an alternative genesis block if the node is in development mode.
     /// Otherwise, returns the actual genesis block.
-    fn parse_genesis<N: Network>(&self) -> Result<Block<N>> {
+    fn parse_genesis<N: Network>(&self, num_validators: usize) -> Result<Block<N>> {
         if self.dev.is_some() {
             // Initialize the (fixed) RNG.
             let mut rng = ChaChaRng::seed_from_u64(DEVELOPMENT_MODE_RNG_SEED);
             // Initialize the development private keys.
-            let development_private_keys = (0..DEVELOPMENT_MODE_NUM_VALIDATORS)
-                .map(|_| PrivateKey::<N>::new(&mut rng))
-                .collect::<Result<Vec<_>>>()?;
+            let development_private_keys =
+                (0..num_validators).map(|_| PrivateKey::<N>::new(&mut rng)).collect::<Result<Vec<_>>>()?;
 
             // Construct the committee members.
             let members = development_private_keys
@@ -289,22 +288,28 @@ impl Start {
                 .map(|private_key| Ok((Address::try_from(private_key)?, (MIN_VALIDATOR_STAKE, true))))
                 .collect::<Result<indexmap::IndexMap<_, _>>>()?;
             // Construct the committee.
-            let committee = Committee::<N>::new_genesis(members)?;
+            let committee = Committee::<N>::new(0, members)?;
 
             // Determine the public balance per validator.
-            let public_balance_per_validator = (N::STARTING_SUPPLY
-                - (DEVELOPMENT_MODE_NUM_VALIDATORS as u64 * MIN_VALIDATOR_STAKE))
-                / (DEVELOPMENT_MODE_NUM_VALIDATORS as u64);
+            let total_balance = N::STARTING_SUPPLY - (num_validators as u64 * MIN_VALIDATOR_STAKE);
+            let public_balance_per_validator = total_balance.div_euclid(num_validators as u64);
+            let remainder = total_balance.rem_euclid(num_validators as u64);
             assert_eq!(
                 N::STARTING_SUPPLY,
-                (MIN_VALIDATOR_STAKE + public_balance_per_validator) * DEVELOPMENT_MODE_NUM_VALIDATORS as u64,
+                (MIN_VALIDATOR_STAKE + public_balance_per_validator) * num_validators as u64 + remainder,
                 "The public balance per validator is not correct."
             );
 
             // Construct the public balances.
             let public_balances = development_private_keys
                 .iter()
-                .map(|private_key| Ok((Address::try_from(private_key)?, public_balance_per_validator)))
+                .enumerate()
+                .map(|(n, private_key)| {
+                    Ok((
+                        Address::try_from(private_key)?,
+                        public_balance_per_validator + if n == 0 { remainder } else { 0 },
+                    ))
+                })
                 .collect::<Result<indexmap::IndexMap<_, _>>>()?;
 
             // Initialize a new VM.
@@ -344,7 +349,7 @@ impl Start {
         let cdn = self.parse_cdn();
 
         // Parse the genesis block.
-        let genesis = self.parse_genesis::<N>()?;
+        let genesis = self.parse_genesis::<N>(trusted_validators.len())?;
         // Parse the private key of the node.
         let account = self.parse_private_key::<N>()?;
         // Parse the node type.
@@ -579,7 +584,7 @@ mod tests {
         let mut trusted_validators = vec![];
         let mut config = Start::try_parse_from(["snarkos"].iter()).unwrap();
         config.parse_development::<CurrentNetwork>(&mut trusted_peers, &mut trusted_validators).unwrap();
-        let candidate_genesis = config.parse_genesis::<CurrentNetwork>().unwrap();
+        let candidate_genesis = config.parse_genesis::<CurrentNetwork>(4).unwrap();
         assert_eq!(trusted_peers.len(), 0);
         assert_eq!(trusted_validators.len(), 0);
         assert_eq!(candidate_genesis, prod_genesis);
@@ -590,7 +595,7 @@ mod tests {
         let mut trusted_validators = vec![];
         let mut config = Start::try_parse_from(["snarkos", "--dev", "0"].iter()).unwrap();
         config.parse_development::<CurrentNetwork>(&mut trusted_peers, &mut trusted_validators).unwrap();
-        let expected_genesis = config.parse_genesis::<CurrentNetwork>().unwrap();
+        let expected_genesis = config.parse_genesis::<CurrentNetwork>(4).unwrap();
         assert_eq!(config.node, SocketAddr::from_str("0.0.0.0:4130").unwrap());
         assert_eq!(config.rest, SocketAddr::from_str("0.0.0.0:3030").unwrap());
         assert_eq!(trusted_peers.len(), 0);
@@ -605,7 +610,7 @@ mod tests {
         let mut config =
             Start::try_parse_from(["snarkos", "--dev", "1", "--validator", "--private-key", ""].iter()).unwrap();
         config.parse_development::<CurrentNetwork>(&mut trusted_peers, &mut trusted_validators).unwrap();
-        let genesis = config.parse_genesis::<CurrentNetwork>().unwrap();
+        let genesis = config.parse_genesis::<CurrentNetwork>(4).unwrap();
         assert_eq!(config.node, SocketAddr::from_str("0.0.0.0:4131").unwrap());
         assert_eq!(config.rest, SocketAddr::from_str("0.0.0.0:3031").unwrap());
         assert_eq!(trusted_peers.len(), 1);
@@ -620,7 +625,7 @@ mod tests {
         let mut config =
             Start::try_parse_from(["snarkos", "--dev", "2", "--prover", "--private-key", ""].iter()).unwrap();
         config.parse_development::<CurrentNetwork>(&mut trusted_peers, &mut trusted_validators).unwrap();
-        let genesis = config.parse_genesis::<CurrentNetwork>().unwrap();
+        let genesis = config.parse_genesis::<CurrentNetwork>(4).unwrap();
         assert_eq!(config.node, SocketAddr::from_str("0.0.0.0:4132").unwrap());
         assert_eq!(config.rest, SocketAddr::from_str("0.0.0.0:3032").unwrap());
         assert_eq!(trusted_peers.len(), 2);
@@ -635,7 +640,7 @@ mod tests {
         let mut config =
             Start::try_parse_from(["snarkos", "--dev", "3", "--client", "--private-key", ""].iter()).unwrap();
         config.parse_development::<CurrentNetwork>(&mut trusted_peers, &mut trusted_validators).unwrap();
-        let genesis = config.parse_genesis::<CurrentNetwork>().unwrap();
+        let genesis = config.parse_genesis::<CurrentNetwork>(4).unwrap();
         assert_eq!(config.node, SocketAddr::from_str("0.0.0.0:4133").unwrap());
         assert_eq!(config.rest, SocketAddr::from_str("0.0.0.0:3033").unwrap());
         assert_eq!(trusted_peers.len(), 3);
