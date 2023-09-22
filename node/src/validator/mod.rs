@@ -143,7 +143,12 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         let _ = signal_node.set(node.clone());
 
         // Temporary: execute and send `bond_public` tx
-        node.initialize_bonding(dev).await?;
+        let node_clone = node.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(10)).await;
+
+            node_clone.initialize_bonding(dev).await.unwrap();
+        });
 
         // Return the node.
         Ok(node)
@@ -368,7 +373,6 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         }
 
         let self_ = self.clone();
-        tokio::time::sleep(Duration::from_secs(10)).await;
         info!("Executing bonding transaction...");
         // Initialize the locator.
         let locator = (ProgramID::from_str("credits.aleo")?, Identifier::from_str("bond_public")?);
