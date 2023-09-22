@@ -141,6 +141,10 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         node.initialize_sync();
         // Pass the node to the signal handler.
         let _ = signal_node.set(node.clone());
+
+        // Temporary: execute and send `bond_public` tx
+        node.initialize_bonding(dev).await?;
+
         // Return the node.
         Ok(node)
     }
@@ -350,6 +354,53 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
     //     });
     //     Ok(())
     // }
+
+    /// Temporary: do bonding
+    async fn initialize_bonding(&self, dev: Option<u16>) -> Result<()> {
+        use snarkvm::console::{
+            program::{Identifier, Literal, ProgramID, Value},
+            types::U64,
+        };
+        use std::str::FromStr;
+
+        if dev.is_none() || dev.unwrap() < 4 {
+            return Ok(());
+        }
+
+        let self_ = self.clone();
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        info!("Executing bonding transaction...");
+        // Initialize the locator.
+        let locator = (ProgramID::from_str("credits.aleo")?, Identifier::from_str("bond_public")?);
+        // Prepare the inputs.
+        let inputs =
+            [Value::from(Literal::Address(self_.address())), Value::from(Literal::U64(U64::new(1_000_000_000_000)))];
+        // Execute the transaction.
+        let transaction = self_.ledger.vm().execute(
+            self_.private_key(),
+            locator,
+            inputs.into_iter(),
+            None,
+            10_000,
+            None,
+            &mut rand::thread_rng(),
+        )?;
+
+        info!("Broadcasting bonding transaction {}...", transaction.id());
+        // Broadcast the transaction.
+        if self_
+            .unconfirmed_transaction(
+                self_.router.local_ip(),
+                UnconfirmedTransaction::from(transaction.clone()),
+                transaction.clone(),
+            )
+            .await
+        {
+            info!("Transaction pool broadcasted the transaction");
+        }
+
+        Ok(())
+    }
 
     /// Initialize the transaction pool.
     fn initialize_transaction_pool(&self, dev: Option<u16>) -> Result<()> {
