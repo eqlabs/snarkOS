@@ -372,16 +372,15 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             return Ok(());
         }
 
-        let self_ = self.clone();
         info!("Executing bonding transaction...");
         // Initialize the locator.
         let locator = (ProgramID::from_str("credits.aleo")?, Identifier::from_str("bond_public")?);
         // Prepare the inputs.
         let inputs =
-            [Value::from(Literal::Address(self_.address())), Value::from(Literal::U64(U64::new(1_000_000_000_000)))];
+            [Value::from(Literal::Address(self.address())), Value::from(Literal::U64(U64::new(1_000_000_000_000)))];
         // Execute the transaction.
-        let transaction = self_.ledger.vm().execute(
-            self_.private_key(),
+        let transaction = self.ledger.vm().execute(
+            self.private_key(),
             locator,
             inputs.into_iter(),
             None,
@@ -392,9 +391,9 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
 
         info!("Broadcasting bonding transaction {}...", transaction.id());
         // Broadcast the transaction.
-        if self_
+        if self
             .unconfirmed_transaction(
-                self_.router.local_ip(),
+                self.router.local_ip(),
                 UnconfirmedTransaction::from(transaction.clone()),
                 transaction.clone(),
             )
