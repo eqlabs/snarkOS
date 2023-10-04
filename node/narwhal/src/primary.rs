@@ -326,7 +326,11 @@ impl<N: Network> Primary<N> {
             if previous_committee.is_quorum_threshold_reached(&authors) {
                 is_ready = true;
             } else if authors.get(&self.gateway.account().address()).is_none() {
-                bail!("Primary certificate not included in previous round #{previous_round}!");
+                bail!(
+                    "Primary's certificate not included in previous round #{previous_round} (authors {authors:?}, {}:{})!",
+                    authors.len(),
+                    previous_certificates.len()
+                );
             } else {
                 trace!(
                     "Not ready to propose a batch (previous round #{previous_round} authors {authors:?} in {} certificates)",
@@ -795,7 +799,7 @@ impl<N: Network> Primary<N> {
             // Reset the proposed batch.
             let proposal = self.proposed_batch.write().take();
             if let Some(proposal) = proposal {
-                trace!("Round #{} was stale (ts {})", proposal.round(), proposal.timestamp());
+                info!("Round #{} was stale (ts {})", proposal.round(), proposal.timestamp());
                 self.reinsert_transmissions_into_workers(proposal)?;
             }
         }
