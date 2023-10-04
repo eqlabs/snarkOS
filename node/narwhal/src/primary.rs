@@ -325,6 +325,13 @@ impl<N: Network> Primary<N> {
             // Check if the previous certificates have reached the quorum threshold.
             if previous_committee.is_quorum_threshold_reached(&authors) {
                 is_ready = true;
+            } else if authors.get(&self.gateway.account().address()).is_none() {
+                bail!("Primary certificate not included in previous round #{previous_round}!");
+            } else {
+                trace!(
+                    "Not ready to propose a batch (previous round #{previous_round} authors {authors:?} in {} certificates)",
+                    previous_certificates.len()
+                );
             }
         }
         // If the batch is not ready to be proposed, return early.
