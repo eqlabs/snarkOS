@@ -450,7 +450,7 @@ impl<N: Network> Primary<N> {
             let event = Event::BatchSignature(BatchSignature::new(batch_id, signature, timestamp));
             // Send the batch signature to the peer.
             if self_.gateway.send(peer_ip, event).await.is_some() {
-                debug!("Signed a batch for round {batch_round} from '{peer_ip}'");
+                debug!("Signed a batch for round {batch_round} from '{peer_ip}' (id '{batch_id}')");
             }
         });
         Ok(())
@@ -502,7 +502,7 @@ impl<N: Network> Primary<N> {
                     if proposal.batch_id() != batch_id {
                         match self.storage.contains_batch(batch_id) {
                             true => bail!("This batch was already certified"),
-                            false => bail!("Unknown batch ID '{batch_id}'"),
+                            false => bail!("Unknown batch ID '{batch_id}' for round #{}", proposal.round()),
                         }
                     }
 
@@ -795,6 +795,7 @@ impl<N: Network> Primary<N> {
             // Reset the proposed batch.
             let proposal = self.proposed_batch.write().take();
             if let Some(proposal) = proposal {
+                trace!("Round #{} was stale (ts {})", proposal.round(), proposal.timestamp());
                 self.reinsert_transmissions_into_workers(proposal)?;
             }
         }
@@ -809,6 +810,7 @@ impl<N: Network> Primary<N> {
         if current_round + self.storage.max_gc_rounds() >= next_round {
             // Iterate until the penultimate round is reached.
             while self.current_round() < next_round.saturating_sub(1) {
+                debug!("Primary iterating to the round #{}", self.current_round());
                 // Update to the next round in storage.
                 self.storage.increment_to_next_round()?;
                 // Clear the proposed batch.
@@ -826,6 +828,7 @@ impl<N: Network> Primary<N> {
             }
             // Otherwise, handle the Narwhal case.
             else {
+                debug!("Primary handling the Narwhal round #{}", self.current_round());
                 // Update to the next round in storage.
                 self.storage.increment_to_next_round()?;
             }

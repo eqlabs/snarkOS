@@ -209,6 +209,7 @@ impl<N: Network> BFT<N> {
         // If the BFT is ready, then update to the next round.
         if is_ready {
             // Update to the next round in storage.
+            debug!("BFT ready to proceed to next round #{current_round}");
             self.storage().increment_to_next_round()?;
             // Update the timer for the leader certificate.
             self.leader_certificate_timer.store(now(), Ordering::SeqCst);

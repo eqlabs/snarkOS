@@ -73,6 +73,7 @@ pub struct BFTSender<N: Network> {
 impl<N: Network> BFTSender<N> {
     /// Sends the current round to the BFT.
     pub async fn send_primary_round_to_bft(&self, current_round: u64) -> Result<()> {
+        debug!("Sending primary round #{current_round} to BFT");
         // Initialize a callback sender and receiver.
         let (callback_sender, callback_receiver) = oneshot::channel();
         // Send the current round to the BFT.
