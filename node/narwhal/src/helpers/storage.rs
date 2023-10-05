@@ -583,6 +583,7 @@ impl<N: Network> Storage<N> {
 impl<N: Network> Storage<N> {
     /// Syncs the current height with the block.
     pub(crate) fn sync_height_with_block(&self, next_height: u32) {
+        debug!("Syncing heights (block_height={next_height}, current={}", self.current_height());
         // If the block height is greater than the current height in storage, sync the height.
         if next_height > self.current_height() {
             // Update the current height in storage.
@@ -594,6 +595,8 @@ impl<N: Network> Storage<N> {
     pub(crate) fn sync_round_with_block(&self, next_round: u64) {
         // Retrieve the current round in the block.
         let next_round = next_round.max(1);
+
+        debug!("Syncing rounds (block_round={next_round}, current={}", self.current_round());
         // If the round in the block is greater than the current round in storage, sync the round.
         if next_round > self.current_round() {
             // Update the current round in storage.
@@ -601,10 +604,20 @@ impl<N: Network> Storage<N> {
             // Log the updated round.
             info!("Synced to round {next_round}...");
         }
+        let rounds = self.rounds.read();
+        debug!("Storage contains {} rounds", rounds.len());
+        for (round_id, set) in rounds.iter() {
+            debug!("| #{round_id}: {} certificates", set.len());
+        }
     }
 
     /// Syncs the batch certificate with the block.
     pub(crate) fn sync_certificate_with_block(&self, block: &Block<N>, certificate: &BatchCertificate<N>) {
+        // If the round store doesn't contain certificate's round, initialize it
+        if !self.contains_certificates_for_round(certificate.round()) {
+            debug!("Initializing round store for round #{}", certificate.round());
+            self.rounds.write().insert(certificate.round(), Default::default());
+        }
         // Skip if the certificate round is below the GC round.
         if certificate.round() <= self.gc_round() {
             return;

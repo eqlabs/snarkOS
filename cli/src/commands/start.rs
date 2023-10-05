@@ -31,7 +31,7 @@ use snarkvm::{
     utilities::to_bytes_le,
 };
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use colored::Colorize;
 use core::str::FromStr;
@@ -344,9 +344,9 @@ impl Start {
         let cdn = self.parse_cdn();
 
         // Parse the genesis block.
-        let genesis = self.parse_genesis::<N>()?;
+        let genesis = self.parse_genesis::<N>().with_context(|| format!("Failed to parse genesis"))?;
         // Parse the private key of the node.
-        let account = self.parse_private_key::<N>()?;
+        let account = self.parse_private_key::<N>().with_context(|| format!("Failed to parse private key"))?;
         // Parse the node type.
         let node_type = self.parse_node_type();
 

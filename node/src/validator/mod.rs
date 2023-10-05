@@ -40,7 +40,7 @@ use snarkvm::prelude::{
     Network,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use core::future::Future;
 use parking_lot::Mutex;
 use std::{
@@ -86,7 +86,8 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         let signal_node = Self::handle_signals();
 
         // Initialize the ledger.
-        let ledger = Ledger::load(genesis, dev)?;
+        let ledger = Ledger::load(genesis, dev).with_context(|| format!("Failed to load ledger"))?;
+        debug!("Loaded ledger (round={}, height={})", ledger.latest_round(), ledger.latest_height());
         // Initialize the CDN.
         if let Some(base_url) = cdn {
             // Sync the ledger with the CDN.
@@ -98,15 +99,19 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
 
         // Initialize the ledger service.
         let ledger_service = Arc::new(CoreLedgerService::new(ledger.clone()));
+        debug!("Initialized LedgerService");
         // Initialize the sync module.
         let sync = BlockSync::new(BlockSyncMode::Gateway, ledger_service.clone());
+        debug!("Initialized BlockSync");
 
         // Initialize the consensus.
         let mut consensus = Consensus::new(account.clone(), ledger_service, narwhal_ip, trusted_validators, dev)?;
+        debug!("Initialized consensus");
         // Initialize the primary channels.
         let (primary_sender, primary_receiver) = init_primary_channels::<N>();
         // Start the consensus.
         consensus.run(primary_sender, primary_receiver).await?;
+        debug!("Started consensus");
 
         // Initialize the node router.
         let router = Router::new(
@@ -118,6 +123,7 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             dev.is_some(),
         )
         .await?;
+        debug!("Initialized router");
 
         // Initialize the node.
         let mut node = Self {
@@ -131,13 +137,16 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         };
         // Initialize the transaction pool.
         node.initialize_transaction_pool(dev)?;
+        debug!("Initialized Validator instance");
 
         // Initialize the REST server.
         if let Some(rest_ip) = rest_ip {
             node.rest = Some(Rest::start(rest_ip, Some(consensus), ledger.clone(), Arc::new(node.clone()))?);
+            debug!("Started REST server");
         }
         // Initialize the routing.
         node.initialize_routing().await;
+        debug!("Initialized Node");
         // Pass the node to the signal handler.
         let _ = signal_node.set(node.clone());
         // Return the node.

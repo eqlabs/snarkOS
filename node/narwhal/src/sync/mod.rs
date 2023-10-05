@@ -26,6 +26,7 @@ use snarkvm::{
     ledger::{authority::Authority, block::Block, narwhal::BatchCertificate},
 };
 
+use crate::helpers::fmt_id;
 use anyhow::{bail, Result};
 use parking_lot::Mutex;
 use std::{future::Future, net::SocketAddr, sync::Arc};
@@ -81,7 +82,7 @@ impl<N: Network> Sync<N> {
 
         // Sync the storage with the ledger.
         self.sync_storage_with_ledger_at_bootup().await?;
-
+        bail!("Bootup failed");
         info!("Starting the sync module...");
 
         // Start the block sync loop.
@@ -197,10 +198,17 @@ impl<N: Network> Sync<N> {
         self.storage.sync_height_with_block(latest_block.height());
         // Sync the round with the block.
         self.storage.sync_round_with_block(latest_block.round());
+
         // Iterate over the blocks.
         for block in &blocks {
             // If the block authority is a subdag, then sync the batch certificates with the block.
             if let Authority::Quorum(subdag) = block.authority() {
+                for (round, batch_certificates) in subdag.iter() {
+                    debug!("Block #{}, round #{}: {} certificates", block.height(), round, batch_certificates.len());
+                    for cert in batch_certificates.iter() {
+                        debug!("| cert #{} (round {})", fmt_id(cert.certificate_id()), cert.round());
+                    }
+                }
                 // Iterate over the certificates.
                 for certificate in subdag.values().flatten() {
                     // Sync the batch certificate with the block.
