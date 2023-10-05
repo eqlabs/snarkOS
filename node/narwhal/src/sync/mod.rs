@@ -206,7 +206,12 @@ impl<N: Network> Sync<N> {
                 for (round, batch_certificates) in subdag.iter() {
                     debug!("Block #{}, round #{}: {} certificates", block.height(), round, batch_certificates.len());
                     for cert in batch_certificates.iter() {
-                        debug!("| cert #{} (round {})", fmt_id(cert.certificate_id()), cert.round());
+                        debug!(
+                            "| cert #{} (round {}) -> {:?}",
+                            fmt_id(cert.certificate_id()),
+                            cert.round(),
+                            cert.previous_certificate_ids().iter().map(fmt_id).collect::<Vec<String>>()
+                        );
                     }
                 }
                 // Iterate over the certificates.
