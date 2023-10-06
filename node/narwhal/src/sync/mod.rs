@@ -29,7 +29,12 @@ use snarkvm::{
 use crate::helpers::fmt_id;
 use anyhow::{bail, Result};
 use parking_lot::Mutex;
-use std::{future::Future, net::SocketAddr, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+    net::SocketAddr,
+    sync::Arc,
+};
 use tokio::{
     sync::{oneshot, Mutex as TMutex, OnceCell},
     task::JoinHandle,
@@ -220,8 +225,10 @@ impl<N: Network> Sync<N> {
         }
 
         // Iterate over the blocks.
-        let mut round_counter = 0u64;
+        let mut prev_round = 0u64;
         let mut prev_block_time: Option<i64> = None;
+        let mut prev_round_certs: HashMap<u64, indexmap::IndexSet<Field<N>>> = HashMap::new();
+        let mut current_round_certs = indexmap::IndexSet::new();
         for block in &blocks {
             // If the block authority is a subdag, then sync the batch certificates with the block.
             if let Authority::Quorum(subdag) = block.authority() {
@@ -237,10 +244,21 @@ impl<N: Network> Sync<N> {
                 prev_block_time = Some(subdag.timestamp());
                 for (round, batch_certificates) in subdag.iter() {
                     let committee = self.ledger.get_committee_for_round(*round).unwrap();
-                    if round_counter > 0 && round_counter < round - 1 {
-                        warn!("!! Round monotonicity broken, previous {round_counter}, next {round} !!");
+                    if prev_round > 0 && prev_round < round - 1 {
+                        warn!("!! Round gap detected, previous {prev_round}, next {round} !!");
                     }
-                    round_counter = *round;
+                    if prev_round > *round {
+                        warn!("!! Round monotonicity violation detected, previous {prev_round}, next {round} !!");
+                    }
+                    if *round != prev_round {
+                        for id in current_round_certs.drain(..) {
+                            prev_round_certs.entry(prev_round).or_default().insert(id);
+                        }
+                        if prev_round > 10 {
+                            prev_round_certs.remove(&(prev_round - 10));
+                        }
+                    }
+                    prev_round = *round;
                     let leader = committee.get_leader(*round)?;
                     debug!(
                         "  Round {}, committee leader {}: {} certificates, {} transmissions",
@@ -250,6 +268,7 @@ impl<N: Network> Sync<N> {
                         batch_certificates.iter().flat_map(|cert| cert.transmission_ids()).count()
                     );
                     for cert in batch_certificates.iter() {
+                        current_round_certs.insert(cert.certificate_id());
                         debug!(
                             "  | {} (ts {}, author {}) -> {:?}",
                             format_certificate_id(&cert.certificate_id()),
@@ -257,6 +276,14 @@ impl<N: Network> Sync<N> {
                             format_address(cert.author(), cert.author() == leader),
                             cert.previous_certificate_ids().iter().map(format_certificate_id).collect::<Vec<String>>()
                         );
+                        for cert_id in cert.previous_certificate_ids().difference(
+                            &prev_round_certs.get(&(round - 1)).map_or(indexmap::IndexSet::new(), |f| f.clone()),
+                        ) {
+                            warn!(
+                                "  !! DAG integrity violation detected, {} not included in previous round !!",
+                                format_certificate_id(cert_id)
+                            );
+                        }
                     }
                 }
                 // // Iterate over the certificates.
