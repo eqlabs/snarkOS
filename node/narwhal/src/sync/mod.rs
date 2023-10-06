@@ -187,7 +187,7 @@ impl<N: Network> Sync<N> {
         // By virtue of the BFT protocol, we can guarantee that all GC range blocks will be loaded.
         let gc_height = block_height.saturating_sub(u32::try_from(self.storage.max_gc_rounds())?);
         // Retrieve the blocks.
-        let blocks = self.ledger.get_blocks(gc_height..block_height.saturating_add(1))?;
+        let blocks = self.ledger.get_blocks(0..block_height.saturating_add(1))?;
 
         // Acquire the sync lock.
         let _lock = self.lock.lock().await;
@@ -199,28 +199,74 @@ impl<N: Network> Sync<N> {
         // Sync the round with the block.
         self.storage.sync_round_with_block(latest_block.round());
 
+        use snarkvm::prelude::Address;
+        fn format_address<N: Network>(address: Address<N>, highlight: bool) -> String {
+            if highlight {
+                format!("{address}").to_uppercase().get(0..8).unwrap().into()
+            } else {
+                format!("{address}").get(0..8).unwrap().into()
+            }
+        }
+
+        fn format_certificate_id<N: Network>(id: &Field<N>) -> String {
+            format!("C{id}").get(0..9).unwrap().into()
+        }
+
+        fn format_timestamp(ts: i64) -> String {
+            let sec = (ts) % 60;
+            let min = (ts / 60) % 60;
+            let hh = (ts / 60 / 60) % 24;
+            format!("{hh:0>2}:{min:0>2}:{sec:0>2}")
+        }
+
         // Iterate over the blocks.
+        let mut round_counter = 0u64;
+        let mut prev_block_time: Option<i64> = None;
         for block in &blocks {
             // If the block authority is a subdag, then sync the batch certificates with the block.
             if let Authority::Quorum(subdag) = block.authority() {
+                debug!(
+                    "BLOCK #{}: anchor=(round={}, ts={} (+{}s), leader_cert=(author={}, id={}))",
+                    block.height(),
+                    subdag.anchor_round(),
+                    format_timestamp(subdag.timestamp()),
+                    prev_block_time.map_or(0, |t| subdag.timestamp() - t),
+                    format_address(subdag.leader_address(), true),
+                    format_certificate_id(&subdag.leader_certificate().certificate_id())
+                );
+                prev_block_time = Some(subdag.timestamp());
                 for (round, batch_certificates) in subdag.iter() {
-                    debug!("Block #{}, round #{}: {} certificates", block.height(), round, batch_certificates.len());
+                    let committee = self.ledger.get_committee_for_round(*round).unwrap();
+                    if round_counter > 0 && round_counter < round - 1 {
+                        warn!("!! Round monotonicity broken, previous {round_counter}, next {round} !!");
+                    }
+                    round_counter = *round;
+                    let leader = committee.get_leader(*round)?;
+                    debug!(
+                        "  Round {}, committee leader {}: {} certificates, {} transmissions",
+                        round,
+                        format_address(leader, true),
+                        batch_certificates.len(),
+                        batch_certificates.iter().flat_map(|cert| cert.transmission_ids()).count()
+                    );
                     for cert in batch_certificates.iter() {
                         debug!(
-                            "| cert #{} (round {}) -> {:?}",
-                            fmt_id(cert.certificate_id()),
-                            cert.round(),
-                            cert.previous_certificate_ids().iter().map(fmt_id).collect::<Vec<String>>()
+                            "  | {} (ts {}, author {}) -> {:?}",
+                            format_certificate_id(&cert.certificate_id()),
+                            format_timestamp(cert.median_timestamp()),
+                            format_address(cert.author(), cert.author() == leader),
+                            cert.previous_certificate_ids().iter().map(format_certificate_id).collect::<Vec<String>>()
                         );
                     }
                 }
-                // Iterate over the certificates.
-                for certificate in subdag.values().flatten() {
-                    // Sync the batch certificate with the block.
-                    self.storage.sync_certificate_with_block(block, certificate);
-                }
+                // // Iterate over the certificates.
+                // for certificate in subdag.values().flatten() {
+                //     // Sync the batch certificate with the block.
+                //     self.storage.sync_certificate_with_block(block, certificate);
+                // }
             }
         }
+        bail!("Fail early");
 
         /* Sync the BFT DAG */
 

@@ -613,11 +613,6 @@ impl<N: Network> Storage<N> {
 
     /// Syncs the batch certificate with the block.
     pub(crate) fn sync_certificate_with_block(&self, block: &Block<N>, certificate: &BatchCertificate<N>) {
-        // If the round store doesn't contain certificate's round, initialize it
-        if !self.contains_certificates_for_round(certificate.round()) {
-            debug!("Initializing round store for round #{}", certificate.round());
-            self.rounds.write().insert(certificate.round(), Default::default());
-        }
         // Skip if the certificate round is below the GC round.
         if certificate.round() <= self.gc_round() {
             return;
