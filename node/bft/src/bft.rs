@@ -48,14 +48,17 @@ use std::{
     future::Future,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicI64, Ordering},
+        atomic::{AtomicI64, AtomicUsize, Ordering},
         Arc,
     },
+    time::{Duration, Instant},
 };
 use tokio::{
     sync::{oneshot, Mutex as TMutex, OnceCell},
     task::JoinHandle,
+    time::interval,
 };
+static TRANSMISSIONS_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone)]
 pub struct BFT<N: Network> {
@@ -544,6 +547,7 @@ impl<N: Network> BFT<N> {
             info!(
                 "\n\nCommitting a subdag from round {anchor_round} with {num_transmissions} transmissions: {subdag_metadata:?}\n"
             );
+            TRANSMISSIONS_COUNT.fetch_add(num_transmissions, Ordering::Relaxed);
             // Update the DAG, as the subdag was successfully included into a block.
             let mut dag_write = self.dag.write();
             for certificate in commit_subdag.values().flatten() {
@@ -681,6 +685,28 @@ impl<N: Network> BFT<N> {
                 // Send the callback **after** updating the DAG.
                 // Note: We must await the DAG update before proceeding.
                 callback.send(result).ok();
+            }
+        });
+        // Calculate TPS
+        self.spawn(async move {
+            let mut last_count = TRANSMISSIONS_COUNT.load(Ordering::Relaxed);
+            let mut last_time = Instant::now();
+            let mut interval = interval(Duration::from_secs(5));
+            let mut tps_sum = 0.0;
+            let mut num_intervals = 0;
+            loop {
+                interval.tick().await;
+                let current_count = TRANSMISSIONS_COUNT.load(Ordering::Relaxed);
+                let elapsed_time = last_time.elapsed().as_secs_f64();
+                let tps = (current_count - last_count) as f64 / elapsed_time;
+                tps_sum += tps;
+                num_intervals += 1;
+
+                let average_tps = if num_intervals > 0 { tps_sum / num_intervals as f64 } else { 0.0 };
+                warn!("TPS: {:.2}", average_tps);
+
+                last_count = current_count;
+                last_time = Instant::now();
             }
         });
     }
