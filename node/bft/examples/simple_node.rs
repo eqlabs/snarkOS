@@ -285,7 +285,8 @@ fn consensus_handler(receiver: ConsensusReceiver<CurrentNetwork>) {
     let ConsensusReceiver { mut rx_consensus_subdag } = receiver;
 
     tokio::task::spawn(async move {
-        while let Some((subdag, transmissions, callback)) = rx_consensus_subdag.recv().await {
+        while let Some((_subdag, _transmissions, callback)) = rx_consensus_subdag.recv().await {
+            /*
             // Determine the amount of time to sleep for the subdag.
             let subdag_ms = subdag.values().flatten().count();
             // Determine the amount of time to sleep for the transmissions.
@@ -296,6 +297,7 @@ fn consensus_handler(receiver: ConsensusReceiver<CurrentNetwork>) {
             let sleep_ms = (subdag_ms + transmissions_ms + constant_ms) as u64;
             // Sleep for the determined amount of time.
             tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
+            */
             // Call the callback.
             callback.send(Ok(())).ok();
         }
