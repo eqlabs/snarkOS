@@ -45,10 +45,9 @@ for ((i = 0; i < num_nodes; i++)); do
 	elif [[ "$terminal_app" == "Terminal" ]]; then
 		osascript -e "tell application \"$terminal_app\" to do script \"cd $path; $FULL_COMMAND\""
 	else
-		if ! command -v xterm &>/dev/null; then
-			echo "xterm could not be found, please install it"
-			exit
-		fi
-		xterm -e "cd $path; $FULL_COMMAND" &
+		echo "spawning in the background $FULL_COMMAND"
+		sh -c "cd $path; $FULL_COMMAND  > log$i.txt 2>&1 &"
 	fi
 done
+echo
+echo "use 'killall simple_node' to stop all nodes"
