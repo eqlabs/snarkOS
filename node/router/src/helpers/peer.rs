@@ -32,6 +32,8 @@ pub struct Peer<N: Network> {
     first_seen: Instant,
     /// The timestamp of the last message received from this peer.
     last_seen: Instant,
+    /// Whether the peer is currently syncing.
+    syncing: bool,
 }
 
 impl<N: Network> Peer<N> {
@@ -44,6 +46,7 @@ impl<N: Network> Peer<N> {
             version: challenge_request.version,
             first_seen: Instant::now(),
             last_seen: Instant::now(),
+            syncing: false,
         }
     }
 
@@ -91,6 +94,11 @@ impl<N: Network> Peer<N> {
     pub fn last_seen(&self) -> Instant {
         self.last_seen
     }
+
+    /// Returns `true` if the peer is currently syncing.
+    pub fn syncing(&self) -> bool {
+        self.syncing
+    }
 }
 
 impl<N: Network> Peer<N> {
@@ -107,5 +115,10 @@ impl<N: Network> Peer<N> {
     /// Updates the last seen timestamp of the peer.
     pub fn set_last_seen(&mut self, last_seen: Instant) {
         self.last_seen = last_seen;
+    }
+
+    /// Updates the syncing status of the peer.
+    pub fn set_syncing(&mut self, syncing: bool) {
+        self.syncing = syncing;
     }
 }

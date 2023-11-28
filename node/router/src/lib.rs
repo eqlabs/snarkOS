@@ -280,6 +280,13 @@ impl<N: Network> Router<N> {
         self.connecting_peers.lock().contains(ip)
     }
 
+    /// Turns the sync flag on/off for the given peer IP.
+    pub fn set_syncing(&self, peer_ip: &SocketAddr, syncing: bool) {
+        if let Some(peer) = self.connected_peers.write().get_mut(peer_ip) {
+            peer.set_syncing(syncing);
+        }
+    }
+
     /// Returns `true` if the given IP is restricted.
     pub fn is_restricted(&self, ip: &SocketAddr) -> bool {
         self.restricted_peers
