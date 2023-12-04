@@ -674,6 +674,7 @@ impl<N: Network> BlockSync<N> {
 
         // Determine the threshold number of peers to sync from.
         let threshold_to_request = core::cmp::min(candidate_locators.len(), REDUNDANCY_FACTOR);
+        trace!("Threshold to request: {threshold_to_request}");
 
         let mut min_common_ancestor = 0;
         let mut sync_peers = IndexMap::new();
@@ -717,6 +718,7 @@ impl<N: Network> BlockSync<N> {
             return None;
         }
 
+        trace!("Sync peers: {sync_peers:?}");
         Some((sync_peers, min_common_ancestor))
     }
 
@@ -730,8 +732,13 @@ impl<N: Network> BlockSync<N> {
         // Retrieve the latest canon height.
         let latest_canon_height = self.canon.latest_block_height();
 
+        trace!(
+            "Constructing block requests: min_common_ancestor = {min_common_ancestor}, latest_canon_height = {latest_canon_height}"
+        );
+
         // If the minimum common ancestor is at or below the latest canon height, then return early.
         if min_common_ancestor <= latest_canon_height {
+            warn!("The minimum common ancestor is at or below the latest canon height");
             return vec![];
         }
 
@@ -739,6 +746,8 @@ impl<N: Network> BlockSync<N> {
         let start_height = latest_canon_height + 1;
         // Compute the end height for the block request.
         let end_height = (min_common_ancestor + 1).min(start_height + MAX_BLOCK_REQUESTS as u32);
+
+        trace!("Block request range: {start_height}..{end_height}");
 
         let mut requests = Vec::with_capacity((start_height..end_height).len());
 
@@ -778,6 +787,7 @@ fn construct_request<N: Network>(
     height: u32,
     sync_peers: &IndexMap<SocketAddr, BlockLocators<N>>,
 ) -> (Option<N::BlockHash>, Option<N::BlockHash>, usize, bool) {
+    trace!("Constructing block request: height = {height}");
     let mut hash = None;
     let mut hash_redundancy: usize = 0;
     let mut previous_hash = None;
@@ -979,6 +989,19 @@ mod tests {
             // If all peers are ahead, then requests should be prepared.
             check_prepare_block_requests(sync, 10, peers);
         }
+    }
+
+    #[test]
+    fn test_prepare_block_requests_with_high_gap() {
+        let sync = sample_sync_at_height(2862);
+
+        for peer_id in 1..=1 {
+            // Add a peer.
+            sync.update_peer_locators(sample_peer_ip(peer_id), sample_block_locators(468032)).unwrap();
+        }
+
+        let requests = sync.prepare_block_requests();
+        assert!(!requests.is_empty());
     }
 
     #[test]
