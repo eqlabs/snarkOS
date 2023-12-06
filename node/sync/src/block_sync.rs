@@ -379,7 +379,8 @@ impl<N: Network> BlockSync<N> {
     /// Returns a list of block requests, if the node needs to sync.
     fn prepare_block_requests(&self) -> Vec<(u32, SyncRequest<N>)> {
         // Remove timed out block requests.
-        self.remove_timed_out_block_requests();
+        let num = self.remove_timed_out_block_requests();
+        trace!("Removed {} timed out block requests", num);
         // Prepare the block requests.
         if let Some((sync_peers, min_common_ancestor)) = self.find_sync_peers_inner() {
             // Retrieve the highest block height.
@@ -531,6 +532,7 @@ impl<N: Network> BlockSync<N> {
 
         // Determine if the request is complete.
         let is_request_complete = requests.get(&height).map(|(_, _, peer_ips)| peer_ips.is_empty()).unwrap_or(false);
+        trace!("is_request_complete for height {height}: {}", is_request_complete);
 
         // If the request is not complete, return early.
         if !is_request_complete {
@@ -590,6 +592,8 @@ impl<N: Network> BlockSync<N> {
         // Acquire the write lock on the request timestamps map.
         let mut request_timestamps = self.request_timestamps.write();
 
+        trace!("remove_timed_out_block_requests: timestamps: {request_timestamps:?}");
+
         // Retrieve the current time.
         let now = Instant::now();
 
@@ -605,11 +609,13 @@ impl<N: Network> BlockSync<N> {
             // Determine if the request is incomplete.
             let is_request_incomplete =
                 !requests.get(height).map(|(_, _, peer_ips)| peer_ips.is_empty()).unwrap_or(false);
+            trace!("remove_timed_out_block_requests({height}): is_time_passed: {is_time_passed}, is_request_incomplete: {is_request_incomplete}");
             // Determine if the request has timed out.
             let is_timeout = is_time_passed && is_request_incomplete;
 
             // If the request has timed out, then remove it.
             if is_timeout {
+                trace!("Block request {height} has timed out, removing");
                 // Remove the request entry for the given height.
                 if let Some((_, _, sync_ips)) = requests.remove(height) {
                     // Add each sync IP to the timeout IPs.
