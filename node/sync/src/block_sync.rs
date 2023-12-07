@@ -868,12 +868,29 @@ mod tests {
         CHECKPOINT_INTERVAL,
         NUM_RECENT_BLOCKS,
     };
-    use snarkos_node_bft_ledger_service::MockLedgerService;
-    use snarkvm::prelude::{Field, TestRng};
+    use snarkos_node_bft_ledger_service::{MockLedgerService, TranslucentLedgerService};
+    use snarkvm::{
+        console::{
+            account::{PrivateKey, ViewKey},
+            program::{Entry, Identifier, Literal, Plaintext, Zero},
+        },
+        ledger::{
+            store::{helpers::memory::ConsensusMemory, ConsensusStore},
+            Ledger,
+            RecordsFilter,
+        },
+        prelude::{Field, TestRng},
+        synthesizer::{Program, VM},
+    };
 
     use indexmap::indexset;
     use snarkvm::ledger::committee::Committee;
-    use std::net::{IpAddr, Ipv4Addr};
+    use std::{
+        net::{IpAddr, Ipv4Addr},
+        str::FromStr,
+        thread::sleep,
+        time::Duration,
+    };
 
     type CurrentNetwork = snarkvm::prelude::Testnet3;
 
@@ -998,16 +1015,108 @@ mod tests {
     }
 
     #[test]
-    fn test_prepare_block_requests_with_high_gap() {
-        let sync = sample_sync_at_height(2862);
+    fn test_timed_out_blockrequest() {
+        let rng = &mut TestRng::default();
+        let private_key = PrivateKey::<CurrentNetwork>::new(rng).unwrap();
+        let view_key = ViewKey::try_from(&private_key).unwrap();
+        let store = ConsensusStore::<CurrentNetwork, ConsensusMemory<CurrentNetwork>>::open(None).unwrap();
+        let genesis = VM::from(store).unwrap().genesis_beacon(&private_key, rng).unwrap();
+        let ledger = Ledger::<CurrentNetwork, ConsensusMemory<CurrentNetwork>>::load(genesis.clone(), None).unwrap();
+        let ledger_service = TranslucentLedgerService::new(ledger.clone());
+        let sync = BlockSync::<CurrentNetwork>::new(BlockSyncMode::Router, Arc::new(ledger_service));
 
-        for peer_id in 1..=1 {
-            // Add a peer.
-            sync.update_peer_locators(sample_peer_ip(peer_id), sample_block_locators(468032)).unwrap();
+        let block = create_blocks(rng, &ledger, private_key, view_key, 3);
+
+        let mut recents = IndexMap::new();
+        let mut checkpoints = IndexMap::new();
+        checkpoints.insert(0, ledger.get_hash(0).unwrap());
+        for i in 0..=2 {
+            recents.insert(i, ledger.get_hash(i).unwrap());
+        }
+        recents.insert(3, block.hash());
+        let locators = BlockLocators::new(recents, checkpoints).unwrap();
+        for peer_id in 1..=2 {
+            sync.update_peer_locators(sample_peer_ip(peer_id), locators.clone()).unwrap();
         }
 
         let requests = sync.prepare_block_requests();
-        assert!(!requests.is_empty());
+        println!("Requests: {:?}", &requests);
+        for (height, (hash, previous_hash, sync_ips)) in requests {
+            println!("sync_ips: {:?}", &sync_ips);
+            // Insert the block request into the sync pool.
+            let _ = sync.insert_block_request(height, (hash, previous_hash, sync_ips.clone()));
+        }
+        let peer_ip_1 = sample_peer_ip(1);
+
+        sync.insert_block_response(peer_ip_1, block.clone()).unwrap();
+        let result = sync.remove_block_response(3);
+        println!("Result: {result:?}");
+        let num_removed = sync.remove_timed_out_block_requests();
+        println!("Removed {} timed out block requests", num_removed);
+        assert_eq!(num_removed, 0);
+        sleep(Duration::from_secs(16));
+        let num_removed = sync.remove_timed_out_block_requests();
+        println!("Removed {} timed out block requests", num_removed);
+        assert_eq!(num_removed, 1);
+    }
+
+    fn create_blocks(
+        rng: &mut TestRng,
+        ledger: &Ledger<CurrentNetwork, ConsensusMemory<CurrentNetwork>>,
+        private_key: PrivateKey<CurrentNetwork>,
+        view_key: ViewKey<CurrentNetwork>,
+        height: u32,
+    ) -> Block<CurrentNetwork> {
+        let program = Program::<CurrentNetwork>::from_str(
+            r"
+program dummy.aleo;
+function foo:
+    input r0 as u8.private;
+    async foo r0 into r1;
+    output r1 as dummy.aleo/foo.future;
+finalize foo:
+    input r0 as u8.public;
+    add r0 r0 into r1;",
+        )
+        .unwrap();
+
+        // A helper function to find records.
+        let find_records = || {
+            let microcredits = Identifier::from_str("microcredits").unwrap();
+            ledger
+                .find_records(&view_key, RecordsFilter::SlowUnspent(private_key))
+                .unwrap()
+                .filter(|(_, record)| match record.data().get(&microcredits) {
+                    Some(Entry::Private(Plaintext::Literal(Literal::U64(amount), _))) => !amount.is_zero(),
+                    _ => false,
+                })
+                .collect::<indexmap::IndexMap<_, _>>()
+        };
+
+        // Fetch the unspent records.
+        let records = find_records();
+        // Prepare the additional fee.
+        let credits = Some(records.values().next().unwrap().clone());
+
+        // Deploy.
+        let transaction = ledger.vm().deploy(&private_key, &program, credits, 0, None, rng).unwrap();
+        // Verify.
+        ledger.vm().check_transaction(&transaction, None, rng).unwrap();
+        let mut block = None;
+        for i in 1..=height {
+            // Construct the next block.
+            block = Some(
+                ledger
+                    .prepare_advance_to_next_beacon_block(&private_key, vec![], vec![], vec![transaction.clone()], rng)
+                    .unwrap(),
+            );
+            // Advance to the next block.
+            if i < height {
+                ledger.advance_to_next_block(&block.clone().unwrap()).unwrap();
+            }
+        }
+        // return the last block, that isn't in the ledger
+        block.unwrap()
     }
 
     #[test]
