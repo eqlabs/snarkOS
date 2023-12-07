@@ -54,6 +54,10 @@ version = "0.12"
 version = "0.8"
 default-features = false
 
+[dependencies.rand_chacha]
+version = "0.3.0"
+default-features = false
+
 [dependencies.rayon]
 version = "1"
 optional = true

@@ -36,13 +36,18 @@ use snarkvm::prelude::{
     block::{Block, Header},
     coinbase::ProverSolution,
     store::ConsensusStorage,
+    Address,
     Ledger,
     Network,
+    PrivateKey,
 };
 
 use anyhow::Result;
 use core::future::Future;
 use parking_lot::Mutex;
+use rand::prelude::SliceRandom;
+use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+use snarkvm::{ledger::committee::MIN_VALIDATOR_STAKE, prelude::transaction::Transaction};
 use std::{
     net::SocketAddr,
     sync::{atomic::AtomicBool, Arc},
@@ -338,9 +343,6 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
         };
         use std::str::FromStr;
 
-        // Initialize the locator.
-        let locator = (ProgramID::from_str("credits.aleo")?, Identifier::from_str("transfer_public")?);
-
         // Determine whether to start the loop.
         match dev {
             // If the node is running in development mode, only generate if you are allowed.
@@ -371,38 +373,168 @@ impl<N: Network, C: ConsensusStorage<N>> Validator<N, C> {
             tokio::time::sleep(Duration::from_secs(3)).await;
             info!("Starting transaction pool...");
 
+            // Initialize the (fixed) RNG.
+            let mut rng = ChaChaRng::seed_from_u64(1234567890u64);
+            // Initialize the development private keys.
+            let development_private_keys =
+                (0..7).map(|_| PrivateKey::<N>::new(&mut rng)).collect::<Result<Vec<_>>>().unwrap();
+            // Construct the committee members.
+            let members = development_private_keys
+                .iter()
+                .enumerate()
+                .skip(4)
+                .map(|(i, private_key)| (i, Account::try_from(private_key).unwrap()))
+                .collect::<Vec<(usize, Account<N>)>>();
+
+            let min_stake = MIN_VALIDATOR_STAKE;
+            const PRIORITY_FEE: u64 = 1_000_000;
+
+            fn fmt_id(id: impl ToString) -> String {
+                let id = id.to_string();
+                let mut formatted_id = id.chars().take(16).collect::<String>();
+                if id.chars().count() > 16 {
+                    formatted_id.push_str("..");
+                }
+                formatted_id
+            }
+
+            fn transfer<N: Network, C: ConsensusStorage<N>>(
+                self_: &Validator<N, C>,
+                new_validator: &Account<N>,
+            ) -> Result<Transaction<N>> {
+                let transfer_locator = (ProgramID::from_str("credits.aleo")?, Identifier::from_str("transfer_public")?);
+                let inputs = [
+                    Value::from(Literal::Address(new_validator.address())),
+                    Value::from(Literal::U64(U64::new(MIN_VALIDATOR_STAKE + 2 * PRIORITY_FEE))),
+                ];
+
+                self_.ledger.vm().execute(
+                    self_.private_key(),
+                    transfer_locator,
+                    inputs.into_iter(),
+                    None,
+                    PRIORITY_FEE,
+                    None,
+                    &mut rand::thread_rng(),
+                )
+            }
+
+            fn bond<N: Network, C: ConsensusStorage<N>>(
+                self_: &Validator<N, C>,
+                new_validator: &Account<N>,
+            ) -> Result<Transaction<N>> {
+                let locator = (ProgramID::from_str("credits.aleo")?, Identifier::from_str("bond_public")?);
+                let inputs = [
+                    Value::from(Literal::Address(new_validator.address())),
+                    Value::from(Literal::U64(U64::new(MIN_VALIDATOR_STAKE))),
+                ];
+
+                self_.ledger.vm().execute(
+                    new_validator.private_key(),
+                    locator,
+                    inputs.into_iter(),
+                    None,
+                    PRIORITY_FEE,
+                    None,
+                    &mut rand::thread_rng(),
+                )
+            }
+
+            fn unbond<N: Network, C: ConsensusStorage<N>>(
+                self_: &Validator<N, C>,
+                unbonding_validator: &Account<N>,
+            ) -> Result<Transaction<N>> {
+                let locator = (ProgramID::from_str("credits.aleo")?, Identifier::from_str("unbond_public")?);
+                let inputs = [Value::from(Literal::U64(U64::new(MIN_VALIDATOR_STAKE)))];
+
+                self_.ledger.vm().execute(
+                    unbonding_validator.private_key(),
+                    locator,
+                    inputs.into_iter(),
+                    None,
+                    PRIORITY_FEE,
+                    None,
+                    &mut rand::thread_rng(),
+                )
+            }
+
             // Start the transaction loop.
             loop {
                 tokio::time::sleep(Duration::from_millis(500)).await;
 
-                // Prepare the inputs.
-                let inputs = [Value::from(Literal::Address(self_.address())), Value::from(Literal::U64(U64::new(1)))];
-                // Execute the transaction.
-                let transaction = match self_.ledger.vm().execute(
-                    self_.private_key(),
-                    locator,
-                    inputs.into_iter(),
-                    None,
-                    10_000,
-                    None,
-                    &mut rand::thread_rng(),
-                ) {
-                    Ok(transaction) => transaction,
-                    Err(error) => {
-                        error!("Transaction pool encountered an execution error - {error}");
-                        continue;
+                let targets = members.clone();
+                for (dev, account) in targets.iter() {
+                    let tx = match transfer(&self_, account) {
+                        Ok(tx) => tx,
+                        Err(error) => {
+                            error!("Transaction pool encountered an execution error - {error}");
+                            continue;
+                        }
+                    };
+                    // Broadcast the transfer-transaction.
+                    if self_
+                        .unconfirmed_transaction(
+                            self_.router.local_ip(),
+                            UnconfirmedTransaction::from(tx.clone()),
+                            tx.clone(),
+                        )
+                        .await
+                    {
+                        info!(
+                            "Transaction pool broadcasted the transfer {} ({}, #{dev})",
+                            fmt_id(tx.id()),
+                            fmt_id(account.address())
+                        );
                     }
-                };
-                // Broadcast the transaction.
-                if self_
-                    .unconfirmed_transaction(
-                        self_.router.local_ip(),
-                        UnconfirmedTransaction::from(transaction.clone()),
-                        transaction.clone(),
-                    )
-                    .await
-                {
-                    info!("Transaction pool broadcasted the transaction");
+                }
+                for (dev, account) in targets.iter() {
+                    let tx = match bond(&self_, account) {
+                        Ok(tx) => tx,
+                        Err(error) => {
+                            error!("Transaction pool encountered an execution error - {error}");
+                            continue;
+                        }
+                    };
+                    // Broadcast the transfer-transaction.
+                    if self_
+                        .unconfirmed_transaction(
+                            self_.router.local_ip(),
+                            UnconfirmedTransaction::from(tx.clone()),
+                            tx.clone(),
+                        )
+                        .await
+                    {
+                        info!(
+                            "Transaction pool broadcasted the bond_public {} ({}, #{dev})",
+                            fmt_id(tx.id()),
+                            fmt_id(account.address())
+                        );
+                    }
+                }
+
+                for (dev, account) in targets.iter() {
+                    let tx = match unbond(&self_, account) {
+                        Ok(tx) => tx,
+                        Err(error) => {
+                            error!("Transaction pool encountered an execution error - {error}");
+                            continue;
+                        }
+                    };
+                    // Broadcast the unbond-transaction.
+                    if self_
+                        .unconfirmed_transaction(
+                            self_.router.local_ip(),
+                            UnconfirmedTransaction::from(tx.clone()),
+                            tx.clone(),
+                        )
+                        .await
+                    {
+                        info!(
+                            "Transaction pool broadcasted the unbond of {} ({}, #{dev})",
+                            fmt_id(tx.id()),
+                            fmt_id(account.address())
+                        );
+                    }
                 }
             }
         });
