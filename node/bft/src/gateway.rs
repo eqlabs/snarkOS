@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    events::{EventCodec, PrimaryPing},
+    events::{EventCodec, PrimaryPing, TimestampedEvent},
     helpers::{assign_to_worker, Cache, PrimarySender, Resolver, SyncSender, WorkerSender},
     spawn_blocking,
     CONTEXT,
@@ -63,7 +63,17 @@ use futures::SinkExt;
 use indexmap::{IndexMap, IndexSet};
 use parking_lot::{Mutex, RwLock};
 use rand::seq::{IteratorRandom, SliceRandom};
-use std::{collections::HashSet, future::Future, io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    collections::HashSet,
+    future::Future,
+    io,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::{
     net::TcpStream,
     sync::{oneshot, OnceCell},
@@ -95,12 +105,53 @@ pub trait Transport<N: Network>: Send + Sync {
     fn broadcast(&self, event: Event<N>);
 }
 
+#[derive(Debug, Default)]
+pub struct LogicalClock {
+    pub timestamp: AtomicU64,
+}
+
+impl Clone for LogicalClock {
+    fn clone(&self) -> Self {
+        Self { timestamp: AtomicU64::new(self.timestamp.load(Ordering::SeqCst)) }
+    }
+}
+
+impl PartialEq<Self> for LogicalClock {
+    fn eq(&self, other: &Self) -> bool {
+        self.timestamp.load(Ordering::SeqCst) == other.timestamp.load(Ordering::SeqCst)
+    }
+}
+
+impl PartialOrd<Self> for LogicalClock {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let val = self.timestamp.load(Ordering::SeqCst);
+        let other_val = other.timestamp.load(Ordering::SeqCst);
+        val.partial_cmp(&other_val)
+    }
+}
+
+impl LogicalClock {
+    fn on_receive<N: Network>(&self, message: TimestampedEvent<N>) -> Event<N> {
+        self.timestamp
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| Some(current.max(message.timestamp) + 1))
+            .unwrap();
+        message.payload
+    }
+
+    fn on_send<N: Network>(&self, event: Event<N>) -> TimestampedEvent<N> {
+        self.timestamp.fetch_add(1, Ordering::SeqCst);
+        TimestampedEvent { timestamp: self.timestamp.load(Ordering::SeqCst), payload: event }
+    }
+}
+
 #[derive(Clone)]
 pub struct Gateway<N: Network> {
     /// The account of the node.
     account: Account<N>,
     /// The ledger service.
     ledger: Arc<dyn LedgerService<N>>,
+    /// Logical timestamp for tracing message causality.
+    timestamp: Arc<LogicalClock>,
     /// The TCP stack.
     tcp: Tcp,
     /// The cache.
@@ -143,11 +194,13 @@ impl<N: Network> Gateway<N> {
         };
         // Initialize the TCP stack.
         let tcp = Tcp::new(Config::new(ip, Committee::<N>::MAX_COMMITTEE_SIZE));
+
         // Return the gateway.
         Ok(Self {
             account,
             ledger,
             tcp,
+            timestamp: Default::default(),
             cache: Default::default(),
             resolver: Default::default(),
             trusted_validators: trusted_validators.iter().copied().collect(),
@@ -483,11 +536,12 @@ impl<N: Network> Gateway<N> {
             warn!("Unable to resolve the listener IP address '{peer_ip}'");
             return None;
         };
-        // Retrieve the event name.
-        let name = event.name();
+        let timed_event = self.timestamp.on_send(event);
+        let name = timed_event.payload.name();
+        let my_ip = self.tcp.listening_addr().unwrap();
         // Send the event to the peer.
-        trace!("{CONTEXT} Sending '{name}' to '{peer_ip}'");
-        let result = self.unicast(peer_addr, event);
+        info!(src = ?my_ip, "{CONTEXT} Sending '{name}' to '{peer_ip}' ({})", timed_event.timestamp);
+        let result = self.unicast(peer_addr, timed_event);
         // If the event was unable to be sent, disconnect.
         if let Err(e) = &result {
             warn!("{CONTEXT} Failed to send '{name}' to '{peer_ip}': {e}");
@@ -498,20 +552,21 @@ impl<N: Network> Gateway<N> {
     }
 
     /// Handles the inbound event from the peer.
-    async fn inbound(&self, peer_addr: SocketAddr, event: Event<N>) -> Result<()> {
+    async fn inbound(&self, peer_addr: SocketAddr, message: TimestampedEvent<N>) -> Result<()> {
         // Retrieve the listener IP for the peer.
         let Some(peer_ip) = self.resolver.get_listener(peer_addr) else {
             bail!("{CONTEXT} Unable to resolve the (ambiguous) peer address '{peer_addr}'")
         };
         // Ensure that the peer is an authorized committee member.
         if !self.is_authorized_validator_ip(peer_ip) {
-            bail!("{CONTEXT} Dropping '{}' from '{peer_ip}' (not authorized)", event.name())
+            bail!("{CONTEXT} Dropping '{}' from '{peer_ip}' (not authorized)", message.payload.name())
         }
         // Drop the peer, if they have exceeded the rate limit (i.e. they are requesting too much from us).
         let num_events = self.cache.insert_inbound_event(peer_ip, CACHE_EVENTS_INTERVAL);
         if num_events >= self.max_cache_events() {
             bail!("Dropping '{peer_ip}' for spamming events (num_events = {num_events})")
         }
+        let event = self.timestamp.on_receive(message);
         // Rate limit for duplicate requests.
         if matches!(&event, &Event::CertificateRequest(_) | &Event::CertificateResponse(_)) {
             // Retrieve the certificate ID.
@@ -984,7 +1039,7 @@ impl<N: Network> P2P for Gateway<N> {
 #[async_trait]
 impl<N: Network> Reading for Gateway<N> {
     type Codec = EventCodec<N>;
-    type Message = Event<N>;
+    type Message = TimestampedEvent<N>;
 
     /// The maximum queue depth of incoming messages for a single peer.
     const MESSAGE_QUEUE_DEPTH: usize =
@@ -1017,7 +1072,7 @@ impl<N: Network> Reading for Gateway<N> {
 #[async_trait]
 impl<N: Network> Writing for Gateway<N> {
     type Codec = EventCodec<N>;
-    type Message = Event<N>;
+    type Message = TimestampedEvent<N>;
 
     /// The maximum queue depth of outgoing messages for a single peer.
     const MESSAGE_QUEUE_DEPTH: usize =
@@ -1086,25 +1141,29 @@ impl<N: Network> Handshake for Gateway<N> {
 
 /// A macro unwrapping the expected handshake event or returning an error for unexpected events.
 macro_rules! expect_event {
-    ($event_ty:path, $framed:expr, $peer_addr:expr) => {
+    ($event_ty:path, $framed:expr, $peer_addr:expr, $resolve_event:expr) => {
         match $framed.try_next().await? {
-            // Received the expected event, proceed.
-            Some($event_ty(data)) => {
-                trace!("{CONTEXT} Gateway received '{}' from '{}'", data.name(), $peer_addr);
-                data
-            }
-            // Received a disconnect event, abort.
-            Some(Event::Disconnect(reason)) => {
-                return Err(error(format!("{CONTEXT} '{}' disconnected: {reason:?}", $peer_addr)));
-            }
-            // Received an unexpected event, abort.
-            Some(ty) => {
-                return Err(error(format!(
-                    "{CONTEXT} '{}' did not follow the handshake protocol: received {:?} instead of {}",
-                    $peer_addr,
-                    ty.name(),
-                    stringify!($event_ty),
-                )))
+            Some(timed_event) => {
+                match $resolve_event(timed_event) {
+                    // Received the expected event, proceed.
+                    $event_ty(data) => {
+                        trace!("{CONTEXT} Gateway received '{}' from '{}'", data.name(), $peer_addr);
+                        data
+                    }
+                    // Received a disconnect event, abort.
+                    Event::Disconnect(reason) => {
+                        return Err(error(format!("{CONTEXT} '{}' disconnected: {reason:?}", $peer_addr)));
+                    }
+                    // Received an unexpected event, abort.
+                    ty => {
+                        return Err(error(format!(
+                            "{CONTEXT} '{}' did not follow the handshake protocol: received {:?} instead of {}",
+                            $peer_addr,
+                            ty.name(),
+                            stringify!($event_ty),
+                        )));
+                    }
+                }
             }
             // Received nothing.
             None => {
@@ -1118,17 +1177,19 @@ macro_rules! expect_event {
     };
 }
 
-/// Send the given message to the peer.
-async fn send_event<N: Network>(
-    framed: &mut Framed<&mut TcpStream, EventCodec<N>>,
-    peer_addr: SocketAddr,
-    event: Event<N>,
-) -> io::Result<()> {
-    trace!("{CONTEXT} Gateway is sending '{}' to '{peer_addr}'", event.name());
-    framed.send(event).await
-}
-
 impl<N: Network> Gateway<N> {
+    /// Send the given message to the peer.
+    async fn send_event(
+        &self,
+        framed: &mut Framed<&mut TcpStream, EventCodec<N>>,
+        peer_addr: SocketAddr,
+        event: Event<N>,
+    ) -> io::Result<()> {
+        trace!("{CONTEXT} Gateway is sending '{}' to '{peer_addr}'", event.name());
+        let timed_event = self.timestamp.on_send(event);
+        framed.send(timed_event).await
+    }
+
     /// The connection initiator side of the handshake.
     async fn handshake_inner_initiator<'a>(
         &'a self,
@@ -1151,25 +1212,26 @@ impl<N: Network> Gateway<N> {
         let our_nonce = rng.gen();
         // Send a challenge request to the peer.
         let our_request = ChallengeRequest::new(self.local_ip().port(), self.account.address(), our_nonce);
-        send_event(&mut framed, peer_addr, Event::ChallengeRequest(our_request)).await?;
+        self.send_event(&mut framed, peer_addr, Event::ChallengeRequest(our_request)).await?;
 
         /* Step 2: Receive the peer's challenge response followed by the challenge request. */
 
         // Listen for the challenge response message.
-        let peer_response = expect_event!(Event::ChallengeResponse, framed, peer_addr);
+        let update_timestamp = |event| self.timestamp.on_receive(event);
+        let peer_response = expect_event!(Event::ChallengeResponse, framed, peer_addr, update_timestamp);
         // Listen for the challenge request message.
-        let peer_request = expect_event!(Event::ChallengeRequest, framed, peer_addr);
+        let peer_request = expect_event!(Event::ChallengeRequest, framed, peer_addr, update_timestamp);
 
         // Verify the challenge response. If a disconnect reason was returned, send the disconnect message and abort.
         if let Some(reason) =
             self.verify_challenge_response(peer_addr, peer_request.address, peer_response, our_nonce).await
         {
-            send_event(&mut framed, peer_addr, reason.into()).await?;
+            self.send_event(&mut framed, peer_addr, reason.into()).await?;
             return Err(error(format!("Dropped '{peer_addr}' for reason: {reason:?}")));
         }
         // Verify the challenge request. If a disconnect reason was returned, send the disconnect message and abort.
         if let Some(reason) = self.verify_challenge_request(peer_addr, &peer_request) {
-            send_event(&mut framed, peer_addr, reason.into()).await?;
+            self.send_event(&mut framed, peer_addr, reason.into()).await?;
             return Err(error(format!("Dropped '{peer_addr}' for reason: {reason:?}")));
         }
 
@@ -1181,7 +1243,7 @@ impl<N: Network> Gateway<N> {
         };
         // Send the challenge response.
         let our_response = ChallengeResponse { signature: Data::Object(our_signature) };
-        send_event(&mut framed, peer_addr, Event::ChallengeResponse(our_response)).await?;
+        self.send_event(&mut framed, peer_addr, Event::ChallengeResponse(our_response)).await?;
 
         // Add the peer to the gateway.
         self.insert_connected_peer(peer_ip, peer_addr, peer_request.address);
@@ -1202,7 +1264,8 @@ impl<N: Network> Gateway<N> {
         /* Step 1: Receive the challenge request. */
 
         // Listen for the challenge request message.
-        let peer_request = expect_event!(Event::ChallengeRequest, framed, peer_addr);
+        let update_timestamp = |event| self.timestamp.on_receive(event);
+        let peer_request = expect_event!(Event::ChallengeRequest, framed, peer_addr, update_timestamp);
 
         // Ensure the address is not the same as this node.
         if self.account.address() == peer_request.address {
@@ -1219,7 +1282,7 @@ impl<N: Network> Gateway<N> {
         }
         // Verify the challenge request. If a disconnect reason was returned, send the disconnect message and abort.
         if let Some(reason) = self.verify_challenge_request(peer_addr, &peer_request) {
-            send_event(&mut framed, peer_addr, reason.into()).await?;
+            self.send_event(&mut framed, peer_addr, reason.into()).await?;
             return Err(error(format!("Dropped '{peer_addr}' for reason: {reason:?}")));
         }
 
@@ -1234,23 +1297,23 @@ impl<N: Network> Gateway<N> {
         };
         // Send the challenge response.
         let our_response = ChallengeResponse { signature: Data::Object(our_signature) };
-        send_event(&mut framed, peer_addr, Event::ChallengeResponse(our_response)).await?;
+        self.send_event(&mut framed, peer_addr, Event::ChallengeResponse(our_response)).await?;
 
         // Sample a random nonce.
         let our_nonce = rng.gen();
         // Send the challenge request.
         let our_request = ChallengeRequest::new(self.local_ip().port(), self.account.address(), our_nonce);
-        send_event(&mut framed, peer_addr, Event::ChallengeRequest(our_request)).await?;
+        self.send_event(&mut framed, peer_addr, Event::ChallengeRequest(our_request)).await?;
 
         /* Step 3: Receive the challenge response. */
 
         // Listen for the challenge response message.
-        let peer_response = expect_event!(Event::ChallengeResponse, framed, peer_addr);
+        let peer_response = expect_event!(Event::ChallengeResponse, framed, peer_addr, update_timestamp);
         // Verify the challenge response. If a disconnect reason was returned, send the disconnect message and abort.
         if let Some(reason) =
             self.verify_challenge_response(peer_addr, peer_request.address, peer_response, our_nonce).await
         {
-            send_event(&mut framed, peer_addr, reason.into()).await?;
+            self.send_event(&mut framed, peer_addr, reason.into()).await?;
             return Err(error(format!("Dropped '{peer_addr}' for reason: {reason:?}")));
         }
         // Add the peer to the gateway.

@@ -82,6 +82,11 @@ use serde::{Deserialize, Serialize};
 pub use std::io::{self, Result as IoResult};
 use std::{borrow::Cow, net::SocketAddr};
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub struct LogicalClock {
+    ts: u64,
+}
+
 pub trait EventTrait: ToBytes + FromBytes {
     /// Returns the event name.
     fn name(&self) -> Cow<'static, str>;
@@ -118,7 +123,7 @@ impl<N: Network> From<DisconnectReason> for Event<N> {
 
 impl<N: Network> Event<N> {
     /// The version of the event protocol; it can be incremented in order to force users to update.
-    pub const VERSION: u32 = 5;
+    pub const VERSION: u32 = 6;
 
     /// Returns the event name.
     #[inline]

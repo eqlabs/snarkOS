@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::Event;
+use crate::{Event, IoResult};
 use snarkvm::prelude::{FromBytes, Network, ToBytes};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -40,6 +40,30 @@ pub struct EventCodec<N: Network> {
     _phantom: PhantomData<N>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimestampedEvent<N: Network> {
+    pub timestamp: u64,
+    pub payload: Event<N>,
+}
+
+impl<N: Network> TimestampedEvent<N> {}
+
+impl<N: Network> ToBytes for TimestampedEvent<N> {
+    fn write_le<W: io::Write>(&self, mut writer: W) -> IoResult<()> {
+        self.timestamp.write_le(&mut writer)?;
+        self.payload.write_le(&mut writer)
+    }
+}
+
+impl<N: Network> FromBytes for TimestampedEvent<N> {
+    fn read_le<R: io::Read>(mut reader: R) -> io::Result<Self> {
+        let timestamp = u64::read_le(&mut reader)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Unknown timestamp"))?;
+        let payload: Event<N> = Event::read_le(&mut reader)?;
+        Ok(TimestampedEvent { timestamp, payload })
+    }
+}
+
 impl<N: Network> EventCodec<N> {
     pub fn handshake() -> Self {
         let mut codec = Self::default();
@@ -57,10 +81,10 @@ impl<N: Network> Default for EventCodec<N> {
     }
 }
 
-impl<N: Network> Encoder<Event<N>> for EventCodec<N> {
+impl<N: Network> Encoder<TimestampedEvent<N>> for EventCodec<N> {
     type Error = std::io::Error;
 
-    fn encode(&mut self, event: Event<N>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, event: TimestampedEvent<N>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         // Serialize the payload directly into dst.
         event
             .write_le(&mut dst.writer())
@@ -75,7 +99,7 @@ impl<N: Network> Encoder<Event<N>> for EventCodec<N> {
 
 impl<N: Network> Decoder for EventCodec<N> {
     type Error = std::io::Error;
-    type Item = Event<N>;
+    type Item = TimestampedEvent<N>;
 
     fn decode(&mut self, source: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // Decode a frame containing bytes belonging to an event.
@@ -86,7 +110,7 @@ impl<N: Network> Decoder for EventCodec<N> {
 
         // Convert the bytes to an event, or fail if it is not valid.
         let reader = bytes.reader();
-        match Event::read_le(reader) {
+        match TimestampedEvent::read_le(reader) {
             Ok(event) => Ok(Some(event)),
             Err(error) => {
                 error!("Failed to deserialize an event: {}", error);
@@ -104,7 +128,7 @@ const MAX_MESSAGE_LEN: usize = 65535;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EventOrBytes<N: Network> {
     Bytes(Bytes),
-    Event(Event<N>),
+    Event(TimestampedEvent<N>),
 }
 
 impl<N: Network> ToBytes for EventOrBytes<N> {
@@ -331,6 +355,7 @@ impl<N: Network> Decoder for NoiseCodec<N> {
 mod tests {
     use super::*;
     use crate::prop_tests::any_event;
+    use proptest::prelude::{any, BoxedStrategy, Strategy};
 
     use snow::{params::NoiseParams, Builder};
     use test_strategy::proptest;
@@ -385,8 +410,12 @@ mod tests {
         assert_eq!(decoded.to_bytes_le().unwrap(), msg.to_bytes_le().unwrap());
     }
 
+    fn any_timed_event() -> BoxedStrategy<TimestampedEvent<CurrentNetwork>> {
+        (any::<u64>(), any_event()).prop_map(|(timestamp, payload)| TimestampedEvent { timestamp, payload }).boxed()
+    }
+
     #[proptest]
-    fn event_roundtrip(#[strategy(any_event())] event: Event<CurrentNetwork>) {
+    fn event_roundtrip(#[strategy(any_timed_event())] event: TimestampedEvent<CurrentNetwork>) {
         assert_roundtrip(EventOrBytes::Event(event))
     }
 }
