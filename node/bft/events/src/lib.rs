@@ -82,11 +82,6 @@ use serde::{Deserialize, Serialize};
 pub use std::io::{self, Result as IoResult};
 use std::{borrow::Cow, net::SocketAddr};
 
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub struct LogicalClock {
-    ts: u64,
-}
-
 pub trait EventTrait: ToBytes + FromBytes {
     /// Returns the event name.
     fn name(&self) -> Cow<'static, str>;

@@ -139,8 +139,8 @@ impl LogicalClock {
     }
 
     fn on_send<N: Network>(&self, event: Event<N>) -> TimestampedEvent<N> {
-        self.timestamp.fetch_add(1, Ordering::SeqCst);
-        TimestampedEvent { timestamp: self.timestamp.load(Ordering::SeqCst), payload: event }
+        let timestamp = self.timestamp.fetch_add(1, Ordering::SeqCst) + 1;
+        TimestampedEvent { timestamp, payload: event }
     }
 }
 
