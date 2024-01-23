@@ -64,7 +64,7 @@ use indexmap::{IndexMap, IndexSet};
 use parking_lot::{Mutex, RwLock};
 use rand::seq::{IteratorRandom, SliceRandom};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     future::Future,
     io,
     net::SocketAddr,
@@ -105,46 +105,50 @@ pub trait Transport<N: Network>: Send + Sync {
     fn broadcast(&self, event: Event<N>);
 }
 
-#[derive(Debug, Default)]
-pub struct LogicalClock {
-    pub timestamp: AtomicU64,
+#[derive(Debug)]
+pub struct LogicalClock<N: Network> {
+    local_addr: Address<N>,
+    vector_clock: RwLock<HashMap<Address<N>, u64>>,
 }
 
-impl Clone for LogicalClock {
+impl<N: Network> Clone for LogicalClock<N> {
     fn clone(&self) -> Self {
-        Self { timestamp: AtomicU64::new(self.timestamp.load(Ordering::SeqCst)) }
+        Self {
+            local_addr: self.local_addr.clone(),
+            vector_clock: RwLock::new(self.vector_clock.read().deref().clone()),
+        }
     }
 }
 
-impl PartialEq<Self> for LogicalClock {
-    fn eq(&self, other: &Self) -> bool {
-        self.timestamp.load(Ordering::SeqCst) == other.timestamp.load(Ordering::SeqCst)
+impl<N: Network> LogicalClock<N> {
+    pub fn new(local_addr: Address<N>) -> Self {
+        let mut map = HashMap::new();
+        map.insert(local_addr, 0);
+        let vector_clock = RwLock::new(map.clone());
+        Self { local_addr, vector_clock }
     }
-}
 
-impl PartialOrd<Self> for LogicalClock {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let val = self.timestamp.load(Ordering::SeqCst);
-        let other_val = other.timestamp.load(Ordering::SeqCst);
-        val.partial_cmp(&other_val)
-    }
-}
-
-impl LogicalClock {
-    fn on_receive<N: Network>(&self, message: TimestampedEvent<N>, peer_ip: SocketAddr) -> Event<N> {
-        let prev = self
-            .timestamp
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| Some(current.max(message.timestamp) + 1))
-            .unwrap();
-        let new_timestamp = prev.max(message.timestamp) + 1;
-        debug!("Receiving timestamp {}, event '{}' <= {}", new_timestamp, message.payload.name(), peer_ip);
+    fn on_receive(&self, message: TimestampedEvent<N>, peer_ip: SocketAddr) -> Event<N> {
+        {
+            let mut current_time = self.vector_clock.write();
+            current_time.entry(self.local_addr).and_modify(|counter| *counter += 1);
+            for (addr, cnt) in message.timestamp.iter() {
+                let mut current = current_time.entry(*addr).or_insert(0);
+                *current = *cnt.max(current);
+            }
+        }
+        debug!("Event '{}' from {}: clock {:?}", message.payload.name(), peer_ip, self.vector_clock.read().clone());
         message.payload
     }
 
-    fn on_send<N: Network>(&self, event: Event<N>, peer_ip: SocketAddr) -> TimestampedEvent<N> {
-        let timestamp = self.timestamp.fetch_add(1, Ordering::SeqCst) + 1;
-        debug!("Sending timestamp {}, event '{}' => {}", timestamp, event.name(), peer_ip);
-        TimestampedEvent { timestamp, payload: event }
+    fn on_send(&self, event: Event<N>, peer_ip: SocketAddr) -> TimestampedEvent<N> {
+        {
+            let mut current_time = self.vector_clock.write();
+            current_time.entry(self.local_addr).and_modify(|counter| *counter += 1);
+        }
+        let current_time = self.vector_clock.read();
+        debug!("Event '{}' to {}: clock {:?}", event.name(), peer_ip, current_time.clone());
+        TimestampedEvent { timestamp: current_time.deref().clone(), payload: event }
     }
 }
 
@@ -155,7 +159,7 @@ pub struct Gateway<N: Network> {
     /// The ledger service.
     ledger: Arc<dyn LedgerService<N>>,
     /// Logical timestamp for tracing message causality.
-    timestamp: Arc<LogicalClock>,
+    timestamp: Arc<LogicalClock<N>>,
     /// The TCP stack.
     tcp: Tcp,
     /// The cache.
@@ -199,12 +203,15 @@ impl<N: Network> Gateway<N> {
         // Initialize the TCP stack.
         let tcp = Tcp::new(Config::new(ip, Committee::<N>::MAX_COMMITTEE_SIZE));
 
+        // Initialize local logical time
+        let timestamp = Arc::new(LogicalClock::new(account.address()));
+
         // Return the gateway.
         Ok(Self {
             account,
             ledger,
             tcp,
-            timestamp: Default::default(),
+            timestamp,
             cache: Default::default(),
             resolver: Default::default(),
             trusted_validators: trusted_validators.iter().copied().collect(),

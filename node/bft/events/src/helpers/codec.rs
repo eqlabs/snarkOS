@@ -13,16 +13,17 @@
 // limitations under the License.
 
 use crate::{Event, IoResult};
-use snarkvm::prelude::{FromBytes, Network, ToBytes};
+use snarkvm::prelude::{error, Address, FromBytes, Network, ToBytes};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use core::marker::PhantomData;
+use indexmap::IndexMap;
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     prelude::ParallelSlice,
 };
 use snow::{HandshakeState, StatelessTransportState};
-use std::{io, sync::Arc};
+use std::{collections::HashMap, io, net::SocketAddr, sync::Arc};
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 use tracing::*;
 
@@ -42,23 +43,35 @@ pub struct EventCodec<N: Network> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimestampedEvent<N: Network> {
-    pub timestamp: u64,
+    /// Event timestamp is a vector clock of all known validators. Order is insignificant.
+    pub timestamp: HashMap<Address<N>, u64>,
     pub payload: Event<N>,
 }
 
-impl<N: Network> TimestampedEvent<N> {}
-
 impl<N: Network> ToBytes for TimestampedEvent<N> {
     fn write_le<W: io::Write>(&self, mut writer: W) -> IoResult<()> {
-        self.timestamp.write_le(&mut writer)?;
+        // Write the size of vector clock.
+        u16::try_from(self.timestamp.len()).map_err(error)?.write_le(&mut writer)?;
+        // Write the vector clock.
+        for (address, ts) in &self.timestamp {
+            address.write_le(&mut writer)?;
+            ts.write_le(&mut writer)?;
+        }
         self.payload.write_le(&mut writer)
     }
 }
 
 impl<N: Network> FromBytes for TimestampedEvent<N> {
     fn read_le<R: io::Read>(mut reader: R) -> io::Result<Self> {
-        let timestamp = u64::read_le(&mut reader)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Unknown timestamp"))?;
+        // Read the size of the vector clock.
+        let clock_size = u16::read_le(&mut reader)?;
+        // Read the vector clock.
+        let mut timestamp = HashMap::with_capacity(clock_size as usize);
+        for _ in 0..clock_size {
+            let address = Address::<N>::read_le(&mut reader)?;
+            let ts = u64::read_le(&mut reader)?;
+            timestamp.insert(address, ts);
+        }
         let payload: Event<N> = Event::read_le(&mut reader)?;
         Ok(TimestampedEvent { timestamp, payload })
     }
@@ -355,7 +368,11 @@ impl<N: Network> Decoder for NoiseCodec<N> {
 mod tests {
     use super::*;
     use crate::prop_tests::any_event;
-    use proptest::prelude::{any, BoxedStrategy, Strategy};
+    use proptest::{
+        collection::hash_map,
+        prelude::{any, BoxedStrategy, Strategy},
+    };
+    use snarkvm::prelude::{TestRng, Uniform};
 
     use snow::{params::NoiseParams, Builder};
     use test_strategy::proptest;
@@ -410,8 +427,18 @@ mod tests {
         assert_eq!(decoded.to_bytes_le().unwrap(), msg.to_bytes_le().unwrap());
     }
 
+    fn any_valid_address() -> BoxedStrategy<Address<CurrentNetwork>> {
+        any::<u64>().prop_map(|seed| Address::rand(&mut TestRng::fixed(seed))).boxed()
+    }
+
+    fn any_vector_clock() -> BoxedStrategy<HashMap<Address<CurrentNetwork>, u64>> {
+        hash_map(any_valid_address(), any::<u64>(), 4..8).boxed()
+    }
+
     fn any_timed_event() -> BoxedStrategy<TimestampedEvent<CurrentNetwork>> {
-        (any::<u64>(), any_event()).prop_map(|(timestamp, payload)| TimestampedEvent { timestamp, payload }).boxed()
+        (any_vector_clock(), any_event())
+            .prop_map(|(timestamp, payload)| TimestampedEvent { timestamp, payload })
+            .boxed()
     }
 
     #[proptest]
