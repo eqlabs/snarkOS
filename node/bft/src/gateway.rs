@@ -131,15 +131,19 @@ impl PartialOrd<Self> for LogicalClock {
 }
 
 impl LogicalClock {
-    fn on_receive<N: Network>(&self, message: TimestampedEvent<N>) -> Event<N> {
-        self.timestamp
+    fn on_receive<N: Network>(&self, message: TimestampedEvent<N>, peer_ip: SocketAddr) -> Event<N> {
+        let prev = self
+            .timestamp
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| Some(current.max(message.timestamp) + 1))
             .unwrap();
+        let new_timestamp = prev.max(message.timestamp) + 1;
+        debug!("Receiving timestamp {}, event '{}' <= {}", new_timestamp, message.payload.name(), peer_ip);
         message.payload
     }
 
-    fn on_send<N: Network>(&self, event: Event<N>) -> TimestampedEvent<N> {
+    fn on_send<N: Network>(&self, event: Event<N>, peer_ip: SocketAddr) -> TimestampedEvent<N> {
         let timestamp = self.timestamp.fetch_add(1, Ordering::SeqCst) + 1;
+        debug!("Sending timestamp {}, event '{}' => {}", timestamp, event.name(), peer_ip);
         TimestampedEvent { timestamp, payload: event }
     }
 }
@@ -536,11 +540,10 @@ impl<N: Network> Gateway<N> {
             warn!("Unable to resolve the listener IP address '{peer_ip}'");
             return None;
         };
-        let timed_event = self.timestamp.on_send(event);
+        let timed_event = self.timestamp.on_send(event, peer_ip);
         let name = timed_event.payload.name();
-        let my_ip = self.tcp.listening_addr().unwrap();
         // Send the event to the peer.
-        info!(src = ?my_ip, "{CONTEXT} Sending '{name}' to '{peer_ip}' ({})", timed_event.timestamp);
+        trace!("{CONTEXT} Sending '{name}' to '{peer_ip}'");
         let result = self.unicast(peer_addr, timed_event);
         // If the event was unable to be sent, disconnect.
         if let Err(e) = &result {
@@ -566,7 +569,7 @@ impl<N: Network> Gateway<N> {
         if num_events >= self.max_cache_events() {
             bail!("Dropping '{peer_ip}' for spamming events (num_events = {num_events})")
         }
-        let event = self.timestamp.on_receive(message);
+        let event = self.timestamp.on_receive(message, peer_ip);
         // Rate limit for duplicate requests.
         if matches!(&event, &Event::CertificateRequest(_) | &Event::CertificateResponse(_)) {
             // Retrieve the certificate ID.
@@ -1186,7 +1189,7 @@ impl<N: Network> Gateway<N> {
         event: Event<N>,
     ) -> io::Result<()> {
         trace!("{CONTEXT} Gateway is sending '{}' to '{peer_addr}'", event.name());
-        let timed_event = self.timestamp.on_send(event);
+        let timed_event = self.timestamp.on_send(event, peer_addr);
         framed.send(timed_event).await
     }
 
@@ -1217,7 +1220,7 @@ impl<N: Network> Gateway<N> {
         /* Step 2: Receive the peer's challenge response followed by the challenge request. */
 
         // Listen for the challenge response message.
-        let update_timestamp = |event| self.timestamp.on_receive(event);
+        let update_timestamp = |event| self.timestamp.on_receive(event, peer_ip);
         let peer_response = expect_event!(Event::ChallengeResponse, framed, peer_addr, update_timestamp);
         // Listen for the challenge request message.
         let peer_request = expect_event!(Event::ChallengeRequest, framed, peer_addr, update_timestamp);
@@ -1264,7 +1267,7 @@ impl<N: Network> Gateway<N> {
         /* Step 1: Receive the challenge request. */
 
         // Listen for the challenge request message.
-        let update_timestamp = |event| self.timestamp.on_receive(event);
+        let update_timestamp = |event| self.timestamp.on_receive(event, peer_addr);
         let peer_request = expect_event!(Event::ChallengeRequest, framed, peer_addr, update_timestamp);
 
         // Ensure the address is not the same as this node.
