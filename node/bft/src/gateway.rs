@@ -68,10 +68,7 @@ use std::{
     future::Future,
     io,
     net::SocketAddr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 use tokio::{
@@ -107,48 +104,58 @@ pub trait Transport<N: Network>: Send + Sync {
 
 #[derive(Debug)]
 pub struct LogicalClock<N: Network> {
+    /// The address of validator that's running this gateway
     local_addr: Address<N>,
-    vector_clock: RwLock<HashMap<Address<N>, u64>>,
+    /// The (local_timestamp, vector_clock) tuple. Local timestamp is stored separately to save a lookup. All the access is
+    /// currently local writing so using Mutex instead of RWLock.
+    vector_clock: Mutex<(u64, HashMap<Address<N>, u64>)>,
 }
 
 impl<N: Network> Clone for LogicalClock<N> {
     fn clone(&self) -> Self {
-        Self {
-            local_addr: self.local_addr.clone(),
-            vector_clock: RwLock::new(self.vector_clock.read().deref().clone()),
-        }
+        let vector_clock = self.vector_clock.lock();
+        let (local_ts, ref clock) = vector_clock.deref();
+        Self { local_addr: self.local_addr.clone(), vector_clock: Mutex::new((*local_ts, clock.clone())) }
     }
 }
 
 impl<N: Network> LogicalClock<N> {
     pub fn new(local_addr: Address<N>) -> Self {
-        let mut map = HashMap::new();
-        map.insert(local_addr, 0);
-        let vector_clock = RwLock::new(map.clone());
+        let local_ts = 0u64;
+        let vector_clock = Mutex::new((local_ts, HashMap::from([(local_addr, local_ts)])));
         Self { local_addr, vector_clock }
     }
 
     fn on_receive(&self, message: TimestampedEvent<N>, peer_ip: SocketAddr) -> Event<N> {
-        {
-            let mut current_time = self.vector_clock.write();
-            current_time.entry(self.local_addr).and_modify(|counter| *counter += 1);
-            for (addr, cnt) in message.timestamp.iter() {
-                let mut current = current_time.entry(*addr).or_insert(0);
-                *current = *cnt.max(current);
-            }
+        let mut vector_clock = self.vector_clock.lock();
+        let (ref mut local_ts, ref mut clock) = vector_clock.deref_mut();
+        // Update the local timestamp.
+        *local_ts += 1;
+
+        // Go through all received timestamps and create new local vector clock by choosing the max timestamp.
+        for (addr, cnt) in message.timestamp.iter() {
+            let current = clock.entry(*addr).or_insert(0);
+            *current = *cnt.max(current);
         }
-        debug!("Event '{}' from {}: clock {:?}", message.payload.name(), peer_ip, self.vector_clock.read().clone());
+        // Insert the local timestamp into clock.
+        clock.insert(self.local_addr, *local_ts);
+
+        // Send the payload downstream.
+        debug!("Event '{}' from {}: clock {:?}", message.payload.name(), peer_ip, clock.clone());
         message.payload
     }
 
     fn on_send(&self, event: Event<N>, peer_ip: SocketAddr) -> TimestampedEvent<N> {
-        {
-            let mut current_time = self.vector_clock.write();
-            current_time.entry(self.local_addr).and_modify(|counter| *counter += 1);
-        }
-        let current_time = self.vector_clock.read();
-        debug!("Event '{}' to {}: clock {:?}", event.name(), peer_ip, current_time.clone());
-        TimestampedEvent { timestamp: current_time.deref().clone(), payload: event }
+        let mut vector_clock = self.vector_clock.lock();
+        let (ref mut local_ts, ref mut clock) = vector_clock.deref_mut();
+        // Update the local timestamp and store it into vector clock.
+        *local_ts += 1;
+        clock.insert(self.local_addr, *local_ts);
+
+        // Return the timed event with the vector clock snapshot.
+        let clock = clock.clone();
+        debug!("Event '{}' to {}: clock {:?}", event.name(), peer_ip, clock);
+        TimestampedEvent { timestamp: clock, payload: event }
     }
 }
 
