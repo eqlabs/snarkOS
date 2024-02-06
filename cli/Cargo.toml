@@ -124,3 +124,6 @@ features = [ "derive" ]
 
 [target."cfg(target_family = \"unix\")".dependencies.nix]
 version = "0.26"
+[dependencies]
+tracing-core = "0.1.32"
+tracing = "0.1.40"

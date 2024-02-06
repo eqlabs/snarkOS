@@ -3142,6 +3142,8 @@ dependencies = [
  "sys-info",
  "thiserror",
  "tokio",
+ "tracing",
+ "tracing-core",
  "tracing-subscriber 0.3.18",
  "ureq",
  "zeroize",

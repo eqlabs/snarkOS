@@ -12,16 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::helpers::LogWriter;
+use std::marker::PhantomData;
+use std::{cell::OnceCell, fs::File, io, path::Path};
 
 use crossterm::tty::IsTty;
-use std::{fs::File, io, path::Path};
+use snarkvm::prelude::{Network, Testnet3};
 use tokio::sync::mpsc;
-use tracing_subscriber::{
-    layer::{Layer, SubscriberExt},
-    util::SubscriberInitExt,
-    EnvFilter,
-};
+use tracing::Subscriber;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{layer::Layer, EnvFilter};
+
+use crate::helpers::LogWriter;
+
+struct LogicalTimingLayer<N: Network> {
+    clock: OnceCell<LogicalClock<N>>,
+}
+
+#[derive(Debug)]
+pub struct LogicalClock<N: Network> {
+    fixme: PhantomData<N>,
+}
+
+impl<N: Network, S> Layer<S> for LogicalTimingLayer<N> where S: Subscriber {}
 
 /// Initializes the logger.
 ///
@@ -103,6 +116,7 @@ pub fn initialize_logger<P: AsRef<Path>>(verbosity: u8, nodisplay: bool, logfile
         false => Some(log_sender),
     };
 
+    let timing_layer: LogicalTimingLayer<Testnet3> = LogicalTimingLayer { clock: Default::default() };
     // Initialize tracing.
     let _ = tracing_subscriber::registry()
         .with(
@@ -121,6 +135,7 @@ pub fn initialize_logger<P: AsRef<Path>>(verbosity: u8, nodisplay: bool, logfile
                 .with_target(verbosity > 2)
                 .with_filter(filter2),
         )
+        .with(timing_layer)
         .try_init();
 
     log_receiver
