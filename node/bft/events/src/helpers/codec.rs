@@ -17,13 +17,12 @@ use snarkvm::prelude::{error, Address, FromBytes, Network, ToBytes};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use core::marker::PhantomData;
-use indexmap::IndexMap;
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     prelude::ParallelSlice,
 };
 use snow::{HandshakeState, StatelessTransportState};
-use std::{collections::HashMap, io, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, io, sync::Arc};
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 use tracing::*;
 
