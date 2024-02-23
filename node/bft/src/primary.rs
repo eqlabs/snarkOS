@@ -632,18 +632,12 @@ impl<N: Network> Primary<N> {
         // Retrieve the signature and timestamp.
         let BatchSignature { batch_id, signature } = batch_signature;
 
-        // Retrieve the signer.
-        let signer = spawn_blocking!(Ok(signature.to_address()))?;
+        // Retrieve the address of peer. The batch signature authenticity is ensured in `Proposal::verify_signature`.
+        let address = self.gateway.resolver().get_address(peer_ip).expect("BatchSignature from non-validator");
 
-        // Ensure the batch signature is signed by the validator.
-        if self.gateway.resolver().get_address(peer_ip).map_or(true, |address| address != signer) {
-            // Proceed to disconnect the validator.
-            self.gateway.disconnect(peer_ip);
-            bail!("Malicious peer - batch signature is from a different validator ({signer})");
-        }
         // Ensure the batch signature is not from the current primary.
-        if self.gateway.account().address() == signer {
-            bail!("Invalid peer - received a batch signature from myself ({signer})");
+        if self.gateway.account().address() == address {
+            bail!("Invalid peer - received a batch signature from myself ({address})");
         }
 
         let proposal = {
@@ -665,12 +659,22 @@ impl<N: Network> Primary<N> {
                     }
                     // Retrieve the committee lookback for the round.
                     let committee_lookback = self.ledger.get_committee_lookback_for_round(proposal.round())?;
-                    // Retrieve the address of the validator.
-                    let Some(signer) = self.gateway.resolver().get_address(peer_ip) else {
-                        bail!("Signature is from a disconnected validator");
+
+                    match proposal.verify_signature(address, signature, &committee_lookback) {
+                        Ok(Some(verified_signature)) => {
+                            // Add the signature to the batch.
+                            proposal.add_signature(verified_signature);
+                        }
+                        Ok(None) => {
+                            // No error, but no new signature either, so we can return early.
+                            return Ok(());
+                        }
+                        Err(reason) => {
+                            self.gateway.disconnect(peer_ip);
+                            bail!("Malicious batch signature: {}", reason);
+                        }
                     };
-                    // Add the signature to the batch.
-                    proposal.add_signature(signer, signature, &committee_lookback)?;
+
                     info!("Received a batch signature for round {} from '{peer_ip}'", proposal.round());
                     // Check if the batch is ready to be certified.
                     if !proposal.is_quorum_threshold_reached(&committee_lookback) {

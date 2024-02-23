@@ -35,7 +35,11 @@ pub struct Proposal<N: Network> {
     transmissions: IndexMap<TransmissionID<N>, Transmission<N>>,
     /// The set of signatures.
     signatures: IndexSet<Signature<N>>,
+    /// The memoized set of signers. Includes signers of `signatures` + author of `batch_header`.
+    signers: HashSet<Address<N>>,
 }
+
+pub struct VerifiedSignature<N: Network>(Address<N>, Signature<N>);
 
 impl<N: Network> Proposal<N> {
     /// Initializes a new instance of the proposal.
@@ -58,8 +62,9 @@ impl<N: Network> Proposal<N> {
         for (a, b) in batch_header.transmission_ids().iter().zip_eq(transmissions.keys()) {
             ensure!(a == b, "The transmission IDs do not match in the batch header and transmissions");
         }
+        let author = batch_header.author().clone();
         // Return the proposal.
-        Ok(Self { batch_header, transmissions, signatures: Default::default() })
+        Ok(Self { batch_header, transmissions, signatures: Default::default(), signers: HashSet::from([author]) })
     }
 
     /// Returns the proposed batch header.
@@ -93,8 +98,8 @@ impl<N: Network> Proposal<N> {
     }
 
     /// Returns the signers.
-    pub fn signers(&self) -> HashSet<Address<N>> {
-        self.signatures.iter().chain(Some(self.batch_header.signature())).map(Signature::to_address).collect()
+    pub fn signers(&self) -> &HashSet<Address<N>> {
+        &self.signers
     }
 
     /// Returns the nonsigners.
@@ -130,29 +135,35 @@ impl<N: Network> Proposal<N> {
         self.transmissions.get(&transmission_id.into())
     }
 
-    /// Adds a signature to the proposal, if the signature is valid.
-    pub fn add_signature(
-        &mut self,
+    pub fn verify_signature(
+        &self,
         signer: Address<N>,
         signature: Signature<N>,
         committee: &Committee<N>,
-    ) -> Result<()> {
+    ) -> Result<Option<VerifiedSignature<N>>> {
         // Ensure the signer is in the committee.
         if !committee.is_committee_member(signer) {
             bail!("Signature from a non-committee member - '{signer}'")
         }
-        // Ensure the signer is new.
+        // Ensure the signer is new. Resending signatures is not malicious, therefore we don't return an error.
         if self.signers().contains(&signer) {
-            bail!("Duplicate signature from '{signer}'")
+            return Ok(None);
         }
         // Verify the signature. If the signature is not valid, return an error.
         // Note: This check ensures the peer's address matches the address of the signature.
         if !signature.verify(&signer, &[self.batch_id()]) {
             bail!("Signature verification failed")
         }
-        // Insert the signature.
+
+        Ok(Some(VerifiedSignature(signer, signature)))
+    }
+
+    /// Adds a signature to the proposal, if the signature is valid.
+    pub fn add_signature(&mut self, verified_signature: VerifiedSignature<N>) {
+        let VerifiedSignature(signer, signature) = verified_signature;
+        // Insert the signer and the signature.
+        self.signers.insert(signer);
         self.signatures.insert(signature);
-        Ok(())
     }
 
     /// Returns the batch certificate and transmissions.
