@@ -95,7 +95,8 @@ features = [
   "rt-multi-thread",
   "signal",
   "sync",
-  "time"
+  "time",
+  "tracing"
 ]
 
 [dependencies.tokio-util]

@@ -25,6 +25,7 @@ use tikv_jemallocator::Jemalloc;
 static GLOBAL: Jemalloc = Jemalloc;
 
 fn main() -> anyhow::Result<()> {
+    console_subscriber::init();
     // Parse the given arguments.
     let cli = CLI::parse();
     // Run the updater.
