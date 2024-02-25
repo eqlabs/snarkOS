@@ -63,7 +63,7 @@ use std::{
     future::Future,
     net::SocketAddr,
     sync::Arc,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use tokio::{
     sync::{Mutex as TMutex, OnceCell},
@@ -266,6 +266,52 @@ impl<N: Network> Primary<N> {
 }
 
 impl<N: Network> Primary<N> {
+    fn add_signatures_and_check_quorum(
+        &self,
+        signatures: Vec<(SocketAddr, BatchSignature<N>)>,
+    ) -> Option<(bool, Proposal<N>)> {
+        let mut proposal_lock = self.proposed_batch.write();
+        if let Some(proposal) = proposal_lock.as_mut() {
+            let Ok(committee) = &self.ledger.get_committee_lookback_for_round(proposal.round()) else {
+                return None;
+            };
+            let time = SystemTime::now();
+            let mut accepted_signatures = Vec::with_capacity(signatures.len());
+            for (peer_ip, signature) in signatures {
+                match self.verify_batch_signature_from_peer(peer_ip, signature, proposal, committee) {
+                    Ok(new_sig) => {
+                        if new_sig {
+                            accepted_signatures.push(peer_ip);
+                        }
+                    }
+                    Err(reason) => {
+                        warn!("Cannot store a signature from '{peer_ip}' - {reason}");
+                    }
+                };
+            }
+            if !accepted_signatures.is_empty() {
+                info!(
+                    "Received {} new batch signatures for round {} from '{accepted_signatures:?}' (took {:?})",
+                    accepted_signatures.len(),
+                    proposal.round(),
+                    time.elapsed().unwrap()
+                );
+            }
+
+            // Check if the batch is ready to be certified.
+            if proposal.is_quorum_threshold_reached(&committee) {
+                /* Proceeding to certify the batch. */
+                info!("Quorum threshold reached - Preparing to certify our batch for round {}...", proposal.round());
+                // Reset the proposal and return a clone.
+                let proposal = proposal_lock.take().unwrap().clone();
+                return Some((true, proposal));
+            } else {
+                return Some((false, proposal.clone()));
+            }
+        }
+        return None;
+    }
+
     /// Proposes the batch for the current round.
     ///
     /// This method performs the following steps:
@@ -273,7 +319,7 @@ impl<N: Network> Primary<N> {
     /// 2. Sign the batch.
     /// 3. Set the batch proposal in the primary.
     /// 4. Broadcast the batch header to all validators for signing.
-    pub async fn propose_batch(&self) -> Result<()> {
+    pub async fn propose_batch(&self, signatures: Vec<(SocketAddr, BatchSignature<N>)>) -> Result<()> {
         // This function isn't re-entrant.
         let mut lock_guard = self.propose_lock.lock().await;
 
@@ -283,34 +329,48 @@ impl<N: Network> Primary<N> {
             return Ok(());
         }
 
-        // If there is a batch being proposed already,
-        // rebroadcast the batch header to the non-signers, and return early.
-        if let Some(proposal) = self.proposed_batch.read().as_ref() {
-            // Construct the event.
-            // TODO(ljedrz): the BatchHeader should be serialized only once in advance before being sent to non-signers.
-            let event = Event::BatchPropose(proposal.batch_header().clone().into());
+        // If there is a batch being proposed already, verify and add all buffered signatures.
+        if let Some((quorum_reached, proposal)) = self.add_signatures_and_check_quorum(signatures) {
+            let committee = &self.ledger.get_committee_lookback_for_round(proposal.round())?;
+            if quorum_reached {
+                // If quorum was reached, store the certified batch and broadcast it to all validators.
+                // If there was an error storing the certificate, reinsert the transmissions back into the ready queue.
+                if let Err(e) = self.store_and_broadcast_certificate(&proposal, committee).await {
+                    // Reinsert the transmissions back into the ready queue for the next proposal.
+                    self.reinsert_transmissions_into_workers(proposal)?;
+                    return Err(e);
+                }
 
-            // Collect all non_signers into `Vec` to avoid logging and spawning tasks in a loop.
-            let non_signers: Vec<SocketAddr> = proposal
-                .nonsigners(&self.ledger.get_committee_lookback_for_round(proposal.round())?)
-                .iter()
-                .filter_map(|address| self.gateway.resolver().get_peer_ip_for_address(*address))
-                .collect();
+                #[cfg(feature = "metrics")]
+                metrics::increment_gauge(metrics::bft::CERTIFIED_BATCHES, 1.0);
+            } else {
+                // Otherwise reconstruct the event and resend it to all non-signers.
+                // TODO(ljedrz): the BatchHeader should be serialized only once in advance before being sent to non-signers.
+                let event = Event::BatchPropose(proposal.batch_header().clone().into());
 
-            debug!(
-                "Proposed batch for round {} is still valid, resending to {} peers: '{non_signers:?}'",
-                proposal.round(),
-                non_signers.len()
-            );
-            for non_signer in non_signers {
-                let (gateway, event, round) = (self.gateway.clone(), event.clone(), proposal.round());
-                tokio::spawn(async move {
-                    // Resend the batch proposal to the peer.
-                    if gateway.send(non_signer, event).await.is_none() {
-                        warn!("Failed to resend batch proposal for round {round} to peer '{non_signer}'");
-                    }
-                });
+                // Collect all non_signers into `Vec` to avoid logging and spawning tasks in a loop.
+                let non_signers: Vec<SocketAddr> = proposal
+                    .nonsigners(committee)
+                    .iter()
+                    .filter_map(|address| self.gateway.resolver().get_peer_ip_for_address(*address))
+                    .collect();
+
+                debug!(
+                    "Proposed batch for round {} is still valid, resending to {} peers: '{non_signers:?}'",
+                    proposal.round(),
+                    non_signers.len()
+                );
+                for non_signer in non_signers {
+                    let (gateway, event, round) = (self.gateway.clone(), event.clone(), proposal.round());
+                    tokio::spawn(async move {
+                        // Resend the batch proposal to the peer.
+                        if gateway.send(non_signer, event).await.is_none() {
+                            warn!("Failed to resend batch proposal for round {round} to peer '{non_signer}'");
+                        }
+                    });
+                }
             }
+
             return Ok(());
         }
 
@@ -613,6 +673,60 @@ impl<N: Network> Primary<N> {
         Ok(())
     }
 
+    /// Verifies a batch signature from a peer.
+    ///
+    /// This method performs the following steps:
+    /// 1. Ensure the proposed batch has not expired.
+    /// 2. Verify the signature, ensuring it corresponds to the proposed batch.
+    /// 3. Store the signature.
+    fn verify_batch_signature_from_peer(
+        &self,
+        peer_ip: SocketAddr,
+        batch_signature: BatchSignature<N>,
+        proposal: &mut Proposal<N>,
+        committee: &Committee<N>,
+    ) -> Result<bool> {
+        // Retrieve the address of peer. The batch signature authenticity is ensured in `Proposal::verify_signature`.
+        let address = self.gateway.resolver().get_address(peer_ip).expect("BatchSignature from non-validator");
+
+        // Ensure the batch signature is not from the current primary.
+        if self.gateway.account().address() == address {
+            bail!("Invalid peer - received a batch signature from myself ({address})");
+        }
+
+        // Retrieve the signature and timestamp.
+        let BatchSignature { batch_id, signature } = batch_signature;
+
+        // Ensure the batch ID matches the currently proposed batch ID.
+        if proposal.batch_id() != batch_id {
+            match self.storage.contains_batch(batch_id) {
+                true => bail!("This batch was already certified"),
+                false => bail!(
+                    "Unknown batch ID '{batch_id}', expected '{}' for round {}",
+                    proposal.batch_id(),
+                    proposal.round()
+                ),
+            };
+        }
+
+        match proposal.verify_signature(address, signature, committee) {
+            Ok(Some(verified_signature)) => {
+                // Add the signature to the batch.
+                proposal.add_signature(verified_signature);
+            }
+            Ok(None) => {
+                // No error, but no new signature either.
+                return Ok(false);
+            }
+            Err(reason) => {
+                self.gateway.disconnect(peer_ip);
+                bail!("Malicious batch signature: {}", reason);
+            }
+        };
+
+        return Ok(true);
+    }
+
     /// Processes a batch signature from a peer.
     ///
     /// This method performs the following steps:
@@ -907,10 +1021,15 @@ impl<N: Network> Primary<N> {
                     debug!("Skipping batch proposal {}", "(node is syncing)".dimmed());
                     continue;
                 }
+
+                let mut buffered_signatures = Vec::with_capacity(64);
+                while let Ok(signature) = rx_batch_signature.try_recv() {
+                    buffered_signatures.push(signature);
+                }
                 // If there is no proposed batch, attempt to propose a batch.
                 // Note: Do NOT spawn a task around this function call. Proposing a batch is a critical path,
                 // and only one batch needs be proposed at a time.
-                if let Err(e) = self_.propose_batch().await {
+                if let Err(e) = self_.propose_batch(buffered_signatures).await {
                     warn!("Cannot propose a batch - {e}");
                 }
             }
@@ -937,24 +1056,24 @@ impl<N: Network> Primary<N> {
         });
 
         // Process the batch signature.
-        let self_ = self.clone();
-        self.spawn(async move {
-            while let Some((peer_ip, batch_signature)) = rx_batch_signature.recv().await {
-                // If the primary is not synced, then do not store the signature.
-                if !self_.sync.is_synced() {
-                    trace!("Skipping a batch signature from '{peer_ip}' {}", "(node is syncing)".dimmed());
-                    continue;
-                }
-                // Process the batch signature.
-                // Note: Do NOT spawn a task around this function call. Processing signatures from peers
-                // is a critical path, and we should only store the minimum required number of signatures.
-                // In addition, spawning a task can cause concurrent processing of signatures (even with a lock),
-                // which means the RwLock for the proposed batch must become a 'tokio::sync' to be safe.
-                if let Err(e) = self_.process_batch_signature_from_peer(peer_ip, batch_signature).await {
-                    warn!("Cannot store a signature from '{peer_ip}' - {e}");
-                }
-            }
-        });
+        // let self_ = self.clone();
+        // self.spawn(async move {
+        //     while let Some((peer_ip, batch_signature)) = rx_batch_signature.recv().await {
+        //         // If the primary is not synced, then do not store the signature.
+        //         if !self_.sync.is_synced() {
+        //             trace!("Skipping a batch signature from '{peer_ip}' {}", "(node is syncing)".dimmed());
+        //             continue;
+        //         }
+        //         // Process the batch signature.
+        //         // Note: Do NOT spawn a task around this function call. Processing signatures from peers
+        //         // is a critical path, and we should only store the minimum required number of signatures.
+        //         // In addition, spawning a task can cause concurrent processing of signatures (even with a lock),
+        //         // which means the RwLock for the proposed batch must become a 'tokio::sync' to be safe.
+        //         if let Err(e) = self_.process_batch_signature_from_peer(peer_ip, batch_signature).await {
+        //             warn!("Cannot store a signature from '{peer_ip}' - {e}");
+        //         }
+        //     }
+        // });
 
         // Process the certified batch.
         let self_ = self.clone();
@@ -1086,9 +1205,9 @@ impl<N: Network> Primary<N> {
             }
 
             // If the node is ready, propose a batch for the next round.
-            if is_ready {
-                self.propose_batch().await?;
-            }
+            // if is_ready {
+            //     self.propose_batch(vec![]).await?;
+            // }
         }
         Ok(())
     }
@@ -1656,7 +1775,7 @@ mod tests {
 
         // Try to propose a batch. There are no transmissions in the workers so the method should
         // just return without proposing a batch.
-        assert!(primary.propose_batch().await.is_ok());
+        assert!(primary.propose_batch(vec![]).await.is_ok());
         assert!(primary.proposed_batch.read().is_none());
 
         // Generate a solution and a transaction.
@@ -1668,7 +1787,7 @@ mod tests {
         primary.workers[0].process_unconfirmed_transaction(transaction_id, transaction).await.unwrap();
 
         // Try to propose a batch again. This time, it should succeed.
-        assert!(primary.propose_batch().await.is_ok());
+        assert!(primary.propose_batch(vec![]).await.is_ok());
         assert!(primary.proposed_batch.read().is_some());
     }
 
@@ -1683,7 +1802,7 @@ mod tests {
 
         // Try to propose a batch. There are no transmissions in the workers so the method should
         // just return without proposing a batch.
-        assert!(primary.propose_batch().await.is_ok());
+        assert!(primary.propose_batch(vec![]).await.is_ok());
         assert!(primary.proposed_batch.read().is_none());
 
         // Generate a solution and a transaction.
@@ -1695,7 +1814,7 @@ mod tests {
         primary.workers[0].process_unconfirmed_transaction(transaction_id, transaction).await.unwrap();
 
         // Propose a batch again. This time, it should succeed.
-        assert!(primary.propose_batch().await.is_ok());
+        assert!(primary.propose_batch(vec![]).await.is_ok());
         assert!(primary.proposed_batch.read().is_some());
     }
 

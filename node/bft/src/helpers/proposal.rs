@@ -28,6 +28,7 @@ use snarkvm::{
 use indexmap::{IndexMap, IndexSet};
 use std::collections::HashSet;
 
+#[derive(Clone)]
 pub struct Proposal<N: Network> {
     /// The proposed batch header.
     batch_header: BatchHeader<N>,
