@@ -24,6 +24,7 @@ use crate::{
         Storage,
         DAG,
     },
+    spawn,
     Primary,
     MAX_LEADER_CERTIFICATE_DELAY_IN_SECS,
 };
@@ -742,7 +743,7 @@ impl<N: Network> BFT<N> {
 
         // Process the current round from the primary.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("BFT:next_round", async move {
             while let Some((current_round, callback)) = rx_primary_round.recv().await {
                 callback.send(self_.update_to_next_round(current_round)).ok();
             }
@@ -750,7 +751,7 @@ impl<N: Network> BFT<N> {
 
         // Process the certificate from the primary.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("BFT:primary_cert", async move {
             while let Some((certificate, callback)) = rx_primary_certificate.recv().await {
                 // Update the DAG with the certificate.
                 let result = self_.update_dag::<true>(certificate).await;
@@ -762,7 +763,7 @@ impl<N: Network> BFT<N> {
 
         // Process the request to sync the BFT DAG at bootup.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("BFT:sync_dag", async move {
             while let Some((leader_certificates, certificates)) = rx_sync_bft_dag_at_bootup.recv().await {
                 self_.sync_bft_dag_at_bootup(leader_certificates, certificates).await;
             }
@@ -770,7 +771,7 @@ impl<N: Network> BFT<N> {
 
         // Process the request to sync the BFT.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("BFT:update_sync_dag", async move {
             while let Some((certificate, callback)) = rx_sync_bft.recv().await {
                 // Update the DAG with the certificate.
                 let result = self_.update_dag::<true>(certificate).await;
@@ -830,8 +831,8 @@ impl<N: Network> BFT<N> {
     }
 
     /// Spawns a task with the given future; it should only be used for long-running tasks.
-    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, future: T) {
-        self.handles.lock().push(tokio::spawn(future));
+    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, name: &str, future: T) {
+        self.handles.lock().push(spawn!(name, future));
     }
 
     /// Shuts down the BFT.

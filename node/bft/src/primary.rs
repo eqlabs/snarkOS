@@ -27,6 +27,7 @@ use crate::{
         Proposal,
         Storage,
     },
+    spawn,
     spawn_blocking,
     Gateway,
     Sync,
@@ -787,7 +788,7 @@ impl<N: Network> Primary<N> {
         // Start the primary ping.
         if self.sync.is_gateway_mode() {
             let self_ = self.clone();
-            self.spawn(async move {
+            self.spawn("Primary:ping_send", async move {
                 loop {
                     // Sleep briefly.
                     tokio::time::sleep(Duration::from_millis(PRIMARY_PING_IN_MS)).await;
@@ -843,7 +844,7 @@ impl<N: Network> Primary<N> {
 
         // Start the primary ping handler.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Primary:ping_recv", async move {
             while let Some((peer_ip, primary_certificate)) = rx_primary_ping.recv().await {
                 // If the primary is not synced, then do not process the primary ping.
                 if !self_.sync.is_synced() {
@@ -854,9 +855,10 @@ impl<N: Network> Primary<N> {
                 // Spawn a task to process the primary certificate.
                 {
                     let self_ = self_.clone();
-                    tokio::spawn(async move {
+                    spawn!("Primary:ping_process", async move {
                         // Deserialize the primary certificate in the primary ping.
-                        let Ok(primary_certificate) = spawn_blocking!(primary_certificate.deserialize_blocking())
+                        let Ok(primary_certificate) =
+                            spawn_blocking!("Primary:cert_deser", primary_certificate.deserialize_blocking())
                         else {
                             warn!("Failed to deserialize primary certificate in 'PrimaryPing' from '{peer_ip}'");
                             return;
@@ -873,7 +875,7 @@ impl<N: Network> Primary<N> {
         // Start the worker ping(s).
         if self.sync.is_gateway_mode() {
             let self_ = self.clone();
-            self.spawn(async move {
+            self.spawn("Primary:worker_ping", async move {
                 loop {
                     tokio::time::sleep(Duration::from_millis(WORKER_PING_IN_MS)).await;
                     // If the primary is not synced, then do not broadcast the worker ping(s).
@@ -891,7 +893,7 @@ impl<N: Network> Primary<N> {
 
         // Start the batch proposer.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Primary:proposal_send", async move {
             loop {
                 // Sleep briefly, but longer than if there were no batch.
                 tokio::time::sleep(Duration::from_millis(MAX_BATCH_DELAY_IN_MS)).await;
@@ -911,7 +913,7 @@ impl<N: Network> Primary<N> {
 
         // Process the proposed batch.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Primary:proposal_recv", async move {
             while let Some((peer_ip, batch_propose)) = rx_batch_propose.recv().await {
                 // If the primary is not synced, then do not sign the batch.
                 if !self_.sync.is_synced() {
@@ -920,7 +922,7 @@ impl<N: Network> Primary<N> {
                 }
                 // Spawn a task to process the proposed batch.
                 let self_ = self_.clone();
-                tokio::spawn(async move {
+                spawn!("Primary:proposal_proc", async move {
                     // Process the batch proposal.
                     if let Err(e) = self_.process_batch_propose_from_peer(peer_ip, batch_propose).await {
                         warn!("Cannot sign a batch from '{peer_ip}' - {e}");
@@ -931,7 +933,7 @@ impl<N: Network> Primary<N> {
 
         // Process the batch signature.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Primary:sign_recv", async move {
             while let Some((peer_ip, batch_signature)) = rx_batch_signature.recv().await {
                 // If the primary is not synced, then do not store the signature.
                 if !self_.sync.is_synced() {
@@ -951,7 +953,7 @@ impl<N: Network> Primary<N> {
 
         // Process the certified batch.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Primary:cert_recv", async move {
             while let Some((peer_ip, batch_certificate)) = rx_batch_certified.recv().await {
                 // If the primary is not synced, then do not store the certificate.
                 if !self_.sync.is_synced() {
@@ -960,9 +962,11 @@ impl<N: Network> Primary<N> {
                 }
                 // Spawn a task to process the batch certificate.
                 let self_ = self_.clone();
-                tokio::spawn(async move {
+                spawn!("Primary:cert_proc", async move {
                     // Deserialize the batch certificate.
-                    let Ok(batch_certificate) = spawn_blocking!(batch_certificate.deserialize_blocking()) else {
+                    let Ok(batch_certificate) =
+                        spawn_blocking!("Primary:cert_deser", batch_certificate.deserialize_blocking())
+                    else {
                         warn!("Failed to deserialize the batch certificate from '{peer_ip}'");
                         return;
                     };
@@ -976,7 +980,7 @@ impl<N: Network> Primary<N> {
 
         // Process the unconfirmed solutions.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Primary:solution_recv", async move {
             while let Some((puzzle_commitment, prover_solution, callback)) = rx_unconfirmed_solution.recv().await {
                 // Compute the worker ID.
                 let Ok(worker_id) = assign_to_worker(puzzle_commitment, self_.num_workers()) else {
@@ -984,7 +988,7 @@ impl<N: Network> Primary<N> {
                     continue;
                 };
                 let self_ = self_.clone();
-                tokio::spawn(async move {
+                spawn!("Primary:solution_proc", async move {
                     // Retrieve the worker.
                     let worker = &self_.workers[worker_id as usize];
                     // Process the unconfirmed solution.
@@ -997,7 +1001,7 @@ impl<N: Network> Primary<N> {
 
         // Process the unconfirmed transactions.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Primary:tx_recv", async move {
             while let Some((transaction_id, transaction, callback)) = rx_unconfirmed_transaction.recv().await {
                 trace!("Primary - Received an unconfirmed transaction '{}'", fmt_id(transaction_id));
                 // Compute the worker ID.
@@ -1006,7 +1010,7 @@ impl<N: Network> Primary<N> {
                     continue;
                 };
                 let self_ = self_.clone();
-                tokio::spawn(async move {
+                spawn!("Primary:tx_proc", async move {
                     // Retrieve the worker.
                     let worker = &self_.workers[worker_id as usize];
                     // Process the unconfirmed transaction.
@@ -1395,8 +1399,8 @@ impl<N: Network> Primary<N> {
 
 impl<N: Network> Primary<N> {
     /// Spawns a task with the given future; it should only be used for long-running tasks.
-    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, future: T) {
-        self.handles.lock().push(tokio::spawn(future));
+    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, name: &str, future: T) {
+        self.handles.lock().push(spawn!(name, future));
     }
 
     /// Shuts down the primary.

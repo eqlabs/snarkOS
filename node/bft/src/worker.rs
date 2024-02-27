@@ -15,6 +15,7 @@
 use crate::{
     events::{Event, TransmissionRequest, TransmissionResponse},
     helpers::{fmt_id, Pending, Ready, Storage, WorkerReceiver, NUM_REDUNDANT_REQUESTS},
+    spawn,
     ProposedBatch,
     Transport,
     MAX_FETCH_TIMEOUT_IN_MS,
@@ -352,7 +353,7 @@ impl<N: Network> Worker<N> {
 
         // Process the ping events.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Worker:ping_recv", async move {
             while let Some((peer_ip, transmission_id)) = rx_worker_ping.recv().await {
                 self_.process_transmission_id_from_ping(peer_ip, transmission_id);
             }
@@ -360,7 +361,7 @@ impl<N: Network> Worker<N> {
 
         // Process the transmission requests.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Worker:txreq_send", async move {
             while let Some((peer_ip, transmission_request)) = rx_transmission_request.recv().await {
                 self_.send_transmission_response(peer_ip, transmission_request);
             }
@@ -368,7 +369,7 @@ impl<N: Network> Worker<N> {
 
         // Process the transmission responses.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Worker:txreq_recv", async move {
             while let Some((peer_ip, transmission_response)) = rx_transmission_response.recv().await {
                 // Process the transmission response.
                 self_.finish_transmission_request(peer_ip, transmission_response);
@@ -439,8 +440,8 @@ impl<N: Network> Worker<N> {
     }
 
     /// Spawns a task with the given future; it should only be used for long-running tasks.
-    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, future: T) {
-        self.handles.lock().push(tokio::spawn(future));
+    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, name: &str, future: T) {
+        self.handles.lock().push(spawn!(name, future));
     }
 
     /// Shuts down the worker.
