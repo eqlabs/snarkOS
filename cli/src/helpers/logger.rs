@@ -15,7 +15,7 @@
 use crate::helpers::LogWriter;
 
 use crossterm::tty::IsTty;
-use std::{fs::File, io, path::Path};
+use std::{fs::File, io, net::Ipv4Addr, path::Path};
 use tokio::sync::mpsc;
 use tracing_subscriber::{
     layer::{Layer, SubscriberExt},
@@ -34,7 +34,12 @@ use tracing_subscriber::{
 /// 5 => info, debug, trace, snarkos_node_router=trace
 /// 6 => info, debug, trace, snarkos_node_tcp=trace
 /// ```
-pub fn initialize_logger<P: AsRef<Path>>(verbosity: u8, nodisplay: bool, logfile: P) -> mpsc::Receiver<Vec<u8>> {
+pub fn initialize_logger<P: AsRef<Path>>(
+    dev: Option<u16>,
+    verbosity: u8,
+    nodisplay: bool,
+    logfile: P,
+) -> mpsc::Receiver<Vec<u8>> {
     match verbosity {
         0 => std::env::set_var("RUST_LOG", "info"),
         1 => std::env::set_var("RUST_LOG", "debug"),
@@ -49,8 +54,6 @@ pub fn initialize_logger<P: AsRef<Path>>(verbosity: u8, nodisplay: bool, logfile
             .add_directive("hyper=off".parse().unwrap())
             .add_directive("reqwest=off".parse().unwrap())
             .add_directive("want=off".parse().unwrap())
-            .add_directive("tokio=trace".parse().unwrap())
-            .add_directive("runtime=trace".parse().unwrap())
             .add_directive("warp=off".parse().unwrap());
 
         let filter = if verbosity >= 2 {
@@ -105,25 +108,27 @@ pub fn initialize_logger<P: AsRef<Path>>(verbosity: u8, nodisplay: bool, logfile
         false => Some(log_sender),
     };
 
-    // Initialize tracing.
-    let _ = tracing_subscriber::registry()
-        .with(
-            // Add layer using LogWriter for stdout / terminal
-            tracing_subscriber::fmt::Layer::default()
-                .with_ansi(log_sender.is_none() && io::stdout().is_tty())
-                .with_writer(move || LogWriter::new(&log_sender))
-                .with_target(verbosity > 2)
-                .with_filter(filter),
-        )
-        .with(
-            // Add layer redirecting logs to the file
-            tracing_subscriber::fmt::Layer::default()
-                .with_ansi(false)
-                .with_writer(logfile)
-                .with_target(verbosity > 2)
-                .with_filter(filter2),
-        )
-        .try_init();
+    let std_layer = // Add layer using LogWriter for stdout / terminal
+        tracing_subscriber::fmt::Layer::default()
+            .with_ansi(log_sender.is_none() && io::stdout().is_tty())
+            .with_writer(move || LogWriter::new(&log_sender))
+            .with_target(verbosity > 2)
+            .with_filter(filter);
+    // Add layer redirecting logs to the file
+    let file_layer = tracing_subscriber::fmt::Layer::default()
+        .with_ansi(false)
+        .with_writer(logfile)
+        .with_target(verbosity > 2)
+        .with_filter(filter2);
+    if let Some(id) = dev {
+        // Add a layer for tokio-console
+        let console_layer =
+            console_subscriber::ConsoleLayer::builder().server_addr((Ipv4Addr::UNSPECIFIED, 7000 + id)).spawn();
+        let _ = tracing_subscriber::registry().with(std_layer).with(file_layer).with(console_layer).try_init();
+    } else {
+        // Initialize tracing.
+        let _ = tracing_subscriber::registry().with(std_layer).with(file_layer).try_init();
+    }
 
     log_receiver
 }

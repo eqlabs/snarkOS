@@ -149,11 +149,9 @@ pub struct Start {
 impl Start {
     /// Starts the snarkOS node.
     pub fn parse(self) -> Result<String> {
-        if let Some(id) = self.dev {
-            console_subscriber::ConsoleLayer::builder().server_addr(([127, 0, 0, 1], 7000 + id)).init();
-        }
         // Initialize the logger.
-        let log_receiver = crate::helpers::initialize_logger(self.verbosity, self.nodisplay, self.logfile.clone());
+        let log_receiver =
+            crate::helpers::initialize_logger(self.dev, self.verbosity, self.nodisplay, self.logfile.clone());
         // Initialize the runtime.
         Self::runtime().block_on(async move {
             // Clone the configurations.
