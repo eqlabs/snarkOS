@@ -14,6 +14,7 @@
 
 use crate::{
     helpers::{fmt_id, BFTSender, Pending, Storage, SyncReceiver, NUM_REDUNDANT_REQUESTS},
+    spawn,
     Gateway,
     Transport,
     MAX_FETCH_TIMEOUT_IN_MS,
@@ -94,7 +95,7 @@ impl<N: Network> Sync<N> {
 
         // Start the block sync loop.
         let self_ = self.clone();
-        self.handles.lock().push(tokio::spawn(async move {
+        self.handles.lock().push(spawn!("Sync:block_sync", async move {
             loop {
                 // Sleep briefly to avoid triggering spam detection.
                 tokio::time::sleep(std::time::Duration::from_millis(PRIMARY_PING_IN_MS)).await;
@@ -121,7 +122,7 @@ impl<N: Network> Sync<N> {
 
         // Process the block sync request to advance with sync blocks.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Sync:sync_storage", async move {
             while let Some((peer_ip, blocks, callback)) = rx_block_sync_advance_with_sync_blocks.recv().await {
                 // Process the block response.
                 if let Err(e) = self_.block_sync.process_block_response(peer_ip, blocks) {
@@ -144,7 +145,7 @@ impl<N: Network> Sync<N> {
 
         // Process the block sync request to remove the peer.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Sync:remove_peer", async move {
             while let Some(peer_ip) = rx_block_sync_remove_peer.recv().await {
                 self_.block_sync.remove_peer(&peer_ip);
             }
@@ -152,7 +153,7 @@ impl<N: Network> Sync<N> {
 
         // Process the block sync request to update peer locators.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Sync:peer_locators", async move {
             while let Some((peer_ip, locators, callback)) = rx_block_sync_update_peer_locators.recv().await {
                 let self_clone = self_.clone();
                 tokio::spawn(async move {
@@ -166,7 +167,7 @@ impl<N: Network> Sync<N> {
 
         // Process the certificate request.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Sync:cert_request", async move {
             while let Some((peer_ip, certificate_request)) = rx_certificate_request.recv().await {
                 self_.send_certificate_response(peer_ip, certificate_request);
             }
@@ -174,7 +175,7 @@ impl<N: Network> Sync<N> {
 
         // Process the certificate response.
         let self_ = self.clone();
-        self.spawn(async move {
+        self.spawn("Sync:cert_response", async move {
             while let Some((peer_ip, certificate_response)) = rx_certificate_response.recv().await {
                 self_.finish_certificate_request(peer_ip, certificate_response)
             }
@@ -463,8 +464,8 @@ impl<N: Network> Sync<N> {
 
 impl<N: Network> Sync<N> {
     /// Spawns a task with the given future; it should only be used for long-running tasks.
-    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, future: T) {
-        self.handles.lock().push(tokio::spawn(future));
+    fn spawn<T: Future<Output = ()> + Send + 'static>(&self, name: &str, future: T) {
+        self.handles.lock().push(spawn!(name, future));
     }
 
     /// Shuts down the primary.

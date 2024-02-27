@@ -66,10 +66,34 @@ pub const WORKER_PING_IN_MS: u64 = 4 * MAX_BATCH_DELAY_IN_MS; // ms
 /// A helper macro to spawn a blocking task.
 #[macro_export]
 macro_rules! spawn_blocking {
+    ($name:expr, $expr:expr) => {
+        if cfg!(tokio_unstable) {
+            match tokio::task::Builder::default().name($name).spawn_blocking(move || $expr).unwrap().await {
+                Ok(value) => value,
+                Err(error) => Err(anyhow::anyhow!("[tokio::spawn_blocking] {error}")),
+            }
+        } else {
+            match tokio::task::spawn_blocking(move || $expr).await {
+                Ok(value) => value,
+                Err(error) => Err(anyhow::anyhow!("[tokio::spawn_blocking] {error}")),
+            }
+        }
+    };
     ($expr:expr) => {
         match tokio::task::spawn_blocking(move || $expr).await {
             Ok(value) => value,
             Err(error) => Err(anyhow::anyhow!("[tokio::spawn_blocking] {error}")),
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! spawn {
+    ($name:expr, $expr:expr) => {
+        if cfg!(tokio_unstable) {
+            tokio::task::Builder::default().name($name).spawn($expr).unwrap()
+        } else {
+            tokio::task::spawn($expr)
         }
     };
 }

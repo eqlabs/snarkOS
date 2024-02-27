@@ -150,7 +150,8 @@ impl Start {
     /// Starts the snarkOS node.
     pub fn parse(self) -> Result<String> {
         // Initialize the logger.
-        let log_receiver = crate::helpers::initialize_logger(self.verbosity, self.nodisplay, self.logfile.clone());
+        let log_receiver =
+            crate::helpers::initialize_logger(self.dev, self.verbosity, self.nodisplay, self.logfile.clone());
         // Initialize the runtime.
         Self::runtime().block_on(async move {
             // Clone the configurations.
