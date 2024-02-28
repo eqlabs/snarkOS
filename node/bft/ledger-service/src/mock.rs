@@ -20,7 +20,7 @@ use snarkvm::{
         committee::Committee,
         narwhal::{BatchCertificate, Data, Subdag, Transmission, TransmissionID},
     },
-    prelude::{bail, ensure, Field, Network, Result},
+    prelude::{bail, ensure, Address, Field, Network, Result},
 };
 
 use indexmap::IndexMap;
@@ -66,6 +66,16 @@ impl<N: Network> LedgerService<N> for MockLedgerService<N> {
     /// Returns the latest block in the ledger.
     fn latest_block(&self) -> Block<N> {
         unreachable!("MockLedgerService does not support latest_block")
+    }
+
+    /// Returns the latest cached leader and its associated round.
+    fn latest_leader(&self) -> Option<(u64, Address<N>)> {
+        unreachable!("MockLedgerService does not support latest_leader")
+    }
+
+    /// Updates the latest cached leader and its associated round.
+    fn update_latest_leader(&self, _round: u64, _leader: Address<N>) {
+        unreachable!("MockLedgerService does not support update_latest_leader")
     }
 
     /// Returns `true` if the given block height exists in the canonical ledger.

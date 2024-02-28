@@ -22,10 +22,12 @@ use snarkvm::{
         store::ConsensusStorage,
         Ledger,
     },
-    prelude::{bail, Field, Network, Result},
+    prelude::{bail, Address, Field, Network, Result},
 };
 
 use indexmap::IndexMap;
+use lru::LruCache;
+use parking_lot::{Mutex, RwLock};
 use std::{
     fmt,
     ops::Range,
@@ -35,18 +37,26 @@ use std::{
     },
 };
 
+/// The capacity of the LRU holiding the recently queried committees.
+const COMMITTEE_CACHE_SIZE: usize = 16;
+
+type LatestLeader<N> = (u64, Address<N>);
+
 /// A core ledger service.
 pub struct CoreLedgerService<N: Network, C: ConsensusStorage<N>> {
     ledger: Ledger<N, C>,
     coinbase_verifying_key: Arc<CoinbaseVerifyingKey<N>>,
     shutdown: Arc<AtomicBool>,
+    committee_cache: Arc<Mutex<LruCache<u64, Committee<N>>>>,
+    latest_leader: Arc<RwLock<Option<LatestLeader<N>>>>,
 }
 
 impl<N: Network, C: ConsensusStorage<N>> CoreLedgerService<N, C> {
     /// Initializes a new core ledger service.
     pub fn new(ledger: Ledger<N, C>, shutdown: Arc<AtomicBool>) -> Self {
         let coinbase_verifying_key = Arc::new(ledger.coinbase_puzzle().coinbase_verifying_key().clone());
-        Self { ledger, coinbase_verifying_key, shutdown }
+        let committee_cache = Arc::new(Mutex::new(LruCache::new(COMMITTEE_CACHE_SIZE.try_into().unwrap())));
+        Self { ledger, coinbase_verifying_key, shutdown, committee_cache, latest_leader: Default::default() }
     }
 }
 
@@ -72,6 +82,16 @@ impl<N: Network, C: ConsensusStorage<N>> LedgerService<N> for CoreLedgerService<
     /// Returns the latest block in the ledger.
     fn latest_block(&self) -> Block<N> {
         self.ledger.latest_block()
+    }
+
+    /// Returns the latest cached leader and its associated round.
+    fn latest_leader(&self) -> Option<(u64, Address<N>)> {
+        *self.latest_leader.read()
+    }
+
+    /// Updates the latest cached leader and its associated round.
+    fn update_latest_leader(&self, round: u64, leader: Address<N>) {
+        *self.latest_leader.write() = Some((round, leader));
     }
 
     /// Returns `true` if the given block height exists in the ledger.
@@ -127,20 +147,30 @@ impl<N: Network, C: ConsensusStorage<N>> LedgerService<N> for CoreLedgerService<
     /// Returns the committee for the given round.
     /// If the given round is in the future, then the current committee is returned.
     fn get_committee_for_round(&self, round: u64) -> Result<Committee<N>> {
-        match self.ledger.get_committee_for_round(round)? {
+        // Check if the committee is already in the cache.
+        if let Some(committee) = self.committee_cache.lock().get(&round) {
+            return Ok(committee.clone());
+        }
+
+        let committee = match self.ledger.get_committee_for_round(round)? {
             // Return the committee if it exists.
-            Some(committee) => Ok(committee),
+            Some(committee) => committee,
             // Return the current committee if the round is in the future.
             None => {
                 // Retrieve the current committee.
                 let current_committee = self.current_committee()?;
                 // Return the current committee if the round is in the future.
                 match current_committee.starting_round() <= round {
-                    true => Ok(current_committee),
+                    true => current_committee,
                     false => bail!("No committee found for round {round} in the ledger"),
                 }
             }
-        }
+        };
+
+        // Insert the committee into the cache.
+        self.committee_cache.lock().push(round, committee.clone());
+
+        Ok(committee)
     }
 
     /// Returns the committee lookback for the given round.

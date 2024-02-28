@@ -120,6 +120,9 @@ version = "=2.2.7"
 path = "./node/tcp"
 version = "=2.2.7"
 
+[dependencies.console-subscriber]
+version = "0.2"
+
 [dependencies.tikv-jemallocator]
 version = "0.5"
 optional = true
