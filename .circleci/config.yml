@@ -17,16 +17,24 @@ commands:
             DEBIAN_FRONTEND=noninteractive sudo apt-get update
             DEBIAN_FRONTEND=noninteractive sudo apt-get dist-upgrade -y -o DPkg::Options::=--force-confold
             DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends clang llvm-dev llvm pkg-config xz-utils make libssl-dev libssl-dev
+            
             cargo install --locked cargo-llvm-cov
+            
+            mkdir -p "$CIRCLE_WORKING_DIRECTORY/.bin"
+            export PATH="$PATH:$CIRCLE_WORKING_DIRECTORY/.bin"
+            
+            curl -Os https://cli.codecov.io/latest/linux/codecov
+            sudo chmod +x codecov
+            mv codecov $CIRCLE_WORKING_DIRECTORY/.bin/codecov
+            
             export SCCACHE_CACHE_SIZE=200M
             export WORK_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
             export SCCACHE_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
-            mkdir -p "$CIRCLE_WORKING_DIRECTORY/.bin"
             wget https://github.com/mozilla/sccache/releases/download/v0.3.0/sccache-v0.3.0-x86_64-unknown-linux-musl.tar.gz
             tar -C "$CIRCLE_WORKING_DIRECTORY/.bin" -xvf sccache-v0.3.0-x86_64-unknown-linux-musl.tar.gz
             mv $CIRCLE_WORKING_DIRECTORY/.bin/sccache-v0.3.0-x86_64-unknown-linux-musl/sccache $CIRCLE_WORKING_DIRECTORY/.bin/sccache
-            export PATH="$PATH:$CIRCLE_WORKING_DIRECTORY/.bin"
             export RUSTC_WRAPPER="sccache"
+            
             rm -rf "$CIRCLE_WORKING_DIRECTORY/.cargo/registry"
       - restore_cache:
           keys:
@@ -62,11 +70,14 @@ commands:
       - setup_environment:
           cache_key: << parameters.cache_key >>
       - run:
-          no_output_timeout: 30m
+          no_output_timeout: 60m
           command: |
             cd << parameters.workspace_member >>
             RUST_MIN_STACK=67108864 CARGO_LLVM_COV_SETUP=yes cargo llvm-cov test --no-clean --release --codecov --ignore-run-fail --output-path codecov.json << parameters.flags >>
-
+      - run:
+          name: Upload results to Codecov
+          command: |
+            $CIRCLE_WORKING_DIRECTORY/.bin/codecov upload-process --token $CODECOV_TOKEN --commit-sha $CIRCLE_SHA1 --slug eqlabs/snarkOS --git-service github
       - clear_environment:
           cache_key: << parameters.cache_key >>
 
