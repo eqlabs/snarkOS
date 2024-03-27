@@ -14,6 +14,10 @@ commands:
       - run:
           name: Prepare environment and install dependencies
           command: |
+            DEBIAN_FRONTEND=noninteractive sudo apt-get update
+            DEBIAN_FRONTEND=noninteractive sudo apt-get dist-upgrade -y -o DPkg::Options::=--force-confold
+            DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends clang llvm-dev llvm pkg-config xz-utils make libssl-dev libssl-dev
+            cargo install --locked cargo-llvm-cov
             export SCCACHE_CACHE_SIZE=200M
             export WORK_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
             export SCCACHE_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
@@ -24,10 +28,6 @@ commands:
             export PATH="$PATH:$CIRCLE_WORKING_DIRECTORY/.bin"
             export RUSTC_WRAPPER="sccache"
             rm -rf "$CIRCLE_WORKING_DIRECTORY/.cargo/registry"
-            DEBIAN_FRONTEND=noninteractive sudo apt-get update
-            DEBIAN_FRONTEND=noninteractive sudo apt-get dist-upgrade -y -o DPkg::Options::=--force-confold
-            DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends clang llvm-dev llvm pkg-config xz-utils make libssl-dev libssl-dev
-            cargo install cargo-llvm-cov
       - restore_cache:
           keys:
             - << parameters.cache_key >>
