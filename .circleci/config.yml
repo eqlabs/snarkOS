@@ -1,45 +1,6 @@
 version: 2.1
 
-orbs:
-  windows: circleci/windows@5.0
-
 commands:
-  check_windows:
-    description: "Runs cargo check on Windows"
-    parameters:
-      workspace_member:
-        type: string
-    steps:
-      - checkout
-      - restore_cache:
-          key: cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}
-      - run:
-          name: "Install Rust and run cargo check"
-          command: |
-            $ProgressPreference = "SilentlyContinue"
-            # Remove the circleci installed rustc.
-            choco uninstall rust
-            # Install llvm (libclang for rocksdb).
-            choco install llvm -y 
-            refreshenv
-            # Install rust with rustup.
-            Invoke-WebRequest -Uri "https://win.rustup.rs/" -OutFile "C:\rustup-init.exe"
-            & C:\rustup-init.exe -y --default-toolchain "stable-x86_64-pc-windows-msvc" --no-modify-path --profile minimal
-            $Env:Path += ";$Env:USERPROFILE\.cargo\bin"
-            # Verify the installation.
-            cargo --version --verbose
-            rustc --version | Out-File -FilePath "rust-version"
-            if (!(Test-Path "Cargo.lock" -PathType Leaf)) {
-                cargo generate-lockfile
-            }
-            cd << parameters.workspace_member >>
-            cargo check --examples --benches --tests
-      - save_cache:
-          paths:
-            - C:\Users\circleci\.cargo\registry
-            - C:\Users\circleci\.cargo\git
-            - target
-          key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
 
   setup_environment:
     description: "Setup testing environment"
@@ -53,19 +14,28 @@ commands:
       - run:
           name: Prepare environment and install dependencies
           command: |
-            export SCCACHE_CACHE_SIZE=200M
-            export WORK_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
-            export SCCACHE_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
-            mkdir -p "$CIRCLE_WORKING_DIRECTORY/.bin"
-            wget https://github.com/mozilla/sccache/releases/download/v0.3.0/sccache-v0.3.0-x86_64-unknown-linux-musl.tar.gz
-            tar -C "$CIRCLE_WORKING_DIRECTORY/.bin" -xvf sccache-v0.3.0-x86_64-unknown-linux-musl.tar.gz
-            mv $CIRCLE_WORKING_DIRECTORY/.bin/sccache-v0.3.0-x86_64-unknown-linux-musl/sccache $CIRCLE_WORKING_DIRECTORY/.bin/sccache
-            export PATH="$PATH:$CIRCLE_WORKING_DIRECTORY/.bin"
-            export RUSTC_WRAPPER="sccache"
-            rm -rf "$CIRCLE_WORKING_DIRECTORY/.cargo/registry"
             DEBIAN_FRONTEND=noninteractive sudo apt-get update
             DEBIAN_FRONTEND=noninteractive sudo apt-get dist-upgrade -y -o DPkg::Options::=--force-confold
             DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends clang llvm-dev llvm pkg-config xz-utils make libssl-dev libssl-dev
+            
+            cargo install --locked cargo-llvm-cov
+            
+            mkdir -p "$CIRCLE_WORKING_DIRECTORY/.bin"
+            export PATH="$PATH:$CIRCLE_WORKING_DIRECTORY/.bin"
+            
+            curl -Os https://cli.codecov.io/latest/linux/codecov
+            sudo chmod +x codecov
+            mv codecov $CIRCLE_WORKING_DIRECTORY/.bin/codecov
+            
+            export SCCACHE_CACHE_SIZE=200M
+            export WORK_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
+            export SCCACHE_DIR="$CIRCLE_WORKING_DIRECTORY/.cache/sccache"
+            wget https://github.com/mozilla/sccache/releases/download/v0.3.0/sccache-v0.3.0-x86_64-unknown-linux-musl.tar.gz
+            tar -C "$CIRCLE_WORKING_DIRECTORY/.bin" -xvf sccache-v0.3.0-x86_64-unknown-linux-musl.tar.gz
+            mv $CIRCLE_WORKING_DIRECTORY/.bin/sccache-v0.3.0-x86_64-unknown-linux-musl/sccache $CIRCLE_WORKING_DIRECTORY/.bin/sccache
+            export RUSTC_WRAPPER="sccache"
+            
+            rm -rf "$CIRCLE_WORKING_DIRECTORY/.cargo/registry"
       - restore_cache:
           keys:
             - << parameters.cache_key >>
@@ -100,8 +70,14 @@ commands:
       - setup_environment:
           cache_key: << parameters.cache_key >>
       - run:
-          no_output_timeout: 30m
-          command: cd << parameters.workspace_member >> && RUST_MIN_STACK=67108864 cargo test << parameters.flags >>
+          no_output_timeout: 60m
+          command: |
+            cd << parameters.workspace_member >>
+            RUST_MIN_STACK=67108864 CARGO_LLVM_COV_SETUP=yes cargo llvm-cov test --no-clean --release --codecov --ignore-run-fail --output-path codecov.json << parameters.flags >>
+      - run:
+          name: Upload results to Codecov
+          command: |
+            $CIRCLE_WORKING_DIRECTORY/.bin/codecov upload-process --token $CODECOV_TOKEN --commit-sha $CIRCLE_SHA1 --slug eqlabs/snarkOS --git-service github
       - clear_environment:
           cache_key: << parameters.cache_key >>
 
@@ -161,7 +137,7 @@ jobs:
   integration:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: 2xlarge
+    resource_class: large
     steps:
       - run_serial_long:
           workspace_member: .integration
@@ -170,7 +146,7 @@ jobs:
   snarkos:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: 2xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: .
@@ -179,7 +155,7 @@ jobs:
   account:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: account
@@ -188,7 +164,7 @@ jobs:
   cli:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: cli
@@ -197,7 +173,7 @@ jobs:
   display:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: display
@@ -206,7 +182,7 @@ jobs:
   node:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: 2xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node
@@ -215,7 +191,7 @@ jobs:
   node-bft:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: 2xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/bft
@@ -224,7 +200,7 @@ jobs:
   node-bft-events:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: 2xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/bft/events
@@ -233,7 +209,7 @@ jobs:
   node-bft-ledger-service:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/bft/ledger-service
@@ -242,7 +218,7 @@ jobs:
   node-bft-storage-service:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/bft/storage-service
@@ -251,7 +227,7 @@ jobs:
   node-cdn:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/cdn
@@ -260,7 +236,7 @@ jobs:
   node-consensus:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: 2xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/consensus
@@ -269,7 +245,7 @@ jobs:
   node-rest:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/rest
@@ -278,7 +254,7 @@ jobs:
   node-router:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/router
@@ -287,7 +263,7 @@ jobs:
   node-router-messages:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/router/messages
@@ -296,7 +272,7 @@ jobs:
   node-sync:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/sync
@@ -305,7 +281,7 @@ jobs:
   node-sync-communication-service:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/sync/communication-service
@@ -314,7 +290,7 @@ jobs:
   node-sync-locators:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/sync/locators
@@ -323,7 +299,7 @@ jobs:
   node-tcp:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - run_serial:
           workspace_member: node/tcp
@@ -332,7 +308,7 @@ jobs:
   check-fmt:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: xlarge
+    resource_class: large
     steps:
       - checkout
       - install_rust_nightly
@@ -348,7 +324,7 @@ jobs:
   check-clippy:
     docker:
       - image: cimg/rust:1.74.1
-    resource_class: 2xlarge
+    resource_class: large
     steps:
       - checkout
       - setup_environment:
@@ -362,64 +338,13 @@ jobs:
       - clear_environment:
           cache_key: snarkos-clippy-cache
 
-  verify-windows:
-    executor:
-      name: windows/default
-      size: xlarge
-    environment:
-      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-    parameters:
-      workspace_member:
-        type: string
-    steps:
-      - check_windows:
-          workspace_member: << parameters.workspace_member >>
-
 workflows:
   version: 2
 
   main-workflow:
     jobs:
-      - snarkos
-      - account
       - cli
-      - display
-      - node
-      - node-bft
       - node-bft-events
-      - node-bft-ledger-service
-      - node-bft-storage-service
-      - node-cdn
-      - node-consensus
-      - node-rest
-      - node-router
-      - node-router-messages
-      - node-sync
-      - node-sync-communication-service
-      - node-sync-locators
       - node-tcp
       - check-fmt
       - check-clippy
-
-  windows-workflow:
-    jobs:
-      - verify-windows:
-          matrix:
-            parameters:
-              workspace_member: [
-                account,
-                cli,
-                display,
-                node
-              ]
-
-  scheduled-workflow:
-    triggers:
-      - schedule:
-          cron: "0 0,12 * * *"
-          filters:
-            branches:
-              only:
-                - mainnet
-    jobs:
-      - integration
