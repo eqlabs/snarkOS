@@ -344,6 +344,7 @@ workflows:
   main-workflow:
     jobs:
       - cli
+      - account
       - node-bft-events
       - node-tcp
       - check-fmt
