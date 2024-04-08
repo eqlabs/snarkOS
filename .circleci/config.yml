@@ -10,7 +10,6 @@ commands:
         default: snarkos-stable-cache
     steps:
       - run: set -e
-      - setup_remote_docker
       - run:
           name: Prepare environment and install dependencies
           command: |
@@ -135,180 +134,160 @@ commands:
 
 jobs:
   integration:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial_long:
           workspace_member: .integration
           cache_key: snarkos-integration-cache
 
   snarkos:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: .
           cache_key: snarkos-stable-cache
 
   account:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: account
           cache_key: snarkos-account-cache
 
   cli:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: cli
           cache_key: snarkos-cli-cache
 
   display:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: display
           cache_key: snarkos-display-cache
 
   node:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node
           cache_key: snarkos-node-cache
 
   node-bft:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/bft
           cache_key: snarkos-node-bft-cache
 
   node-bft-events:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/bft/events
           cache_key: snarkos-node-bft-events-cache
 
   node-bft-ledger-service:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/bft/ledger-service
           cache_key: snarkos-node-bft-ledger-service-cache
 
   node-bft-storage-service:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/bft/storage-service
           cache_key: snarkos-node-bft-storage-service-cache
 
   node-cdn:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/cdn
           cache_key: snarkos-node-cdn-cache
 
   node-consensus:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/consensus
           cache_key: snarkos-node-consensus-cache
 
   node-rest:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/rest
           cache_key: snarkos-node-rest-cache
 
   node-router:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/router
           cache_key: snarkos-node-router-cache
 
   node-router-messages:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/router/messages
           cache_key: snarkos-node-router-messages-cache
 
   node-sync:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/sync
           cache_key: snarkos-node-sync-cache
 
   node-sync-communication-service:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/sync/communication-service
           cache_key: snarkos-node-sync-communication-service-cache
 
   node-sync-locators:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/sync/locators
           cache_key: snarkos-node-sync-locators-cache
 
   node-tcp:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - run_serial:
           workspace_member: node/tcp
           cache_key: snarkos-node-tcp-cache
 
   check-fmt:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - checkout
       - install_rust_nightly
@@ -322,9 +301,8 @@ jobs:
           cache_key: snarkos-fmt-cache
 
   check-clippy:
-    docker:
-      - image: cimg/rust:1.74.1
-    resource_class: large
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
     steps:
       - checkout
       - setup_environment:
@@ -338,12 +316,20 @@ jobs:
       - clear_environment:
           cache_key: snarkos-clippy-cache
 
+  test-runner:
+    machine: true
+    resource_class: exbuhny4gnr1bjbjxfghd7/gcp-test
+    steps:
+      - run: echo "Hi I'm on a Container Runner!"
+
 workflows:
   version: 2
 
   main-workflow:
     jobs:
+      - test-runner
       - cli
+      - account
       - node-bft-events
       - node-tcp
       - check-fmt
