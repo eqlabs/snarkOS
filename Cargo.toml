@@ -45,10 +45,11 @@ version = "=0.1.24"
 default-features = false
 
 [workspace.dependencies.snarkvm]
-git = "https://github.com/AleoHQ/snarkVM.git"
-rev = "ed20562"
+git = "https://github.com/joske/snarkVM.git"
+branch = "test/no-rocks"
+# rev = "ed20562"
 #version = "=0.16.18"
-features = [ "circuit", "console", "rocks" ]
+features = [ "circuit", "console" ]
 
 [[bin]]
 name = "snarkos"

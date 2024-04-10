@@ -18,14 +18,7 @@ use snarkvm::{
         narwhal::{BatchHeader, Transmission, TransmissionID},
         store::{
             cow_to_cloned,
-            helpers::{
-                rocksdb::{
-                    internal::{self, BFTMap, Database, MapID},
-                    DataMap,
-                },
-                Map,
-                MapRead,
-            },
+            helpers::{memory::MemoryMap, Map, MapRead},
         },
     },
     prelude::{bail, Field, Network, Result},
@@ -40,21 +33,19 @@ use tracing::error;
 #[derive(Debug)]
 pub struct BFTPersistentStorage<N: Network> {
     /// The map of `transmission ID` to `(transmission, certificate IDs)` entries.
-    transmissions: DataMap<TransmissionID<N>, (Transmission<N>, IndexSet<Field<N>>)>,
+    transmissions: MemoryMap<TransmissionID<N>, (Transmission<N>, IndexSet<Field<N>>)>,
 }
 
 impl<N: Network> BFTPersistentStorage<N> {
     /// Initializes a new BFT persistent storage service.
-    pub fn open(storage_mode: StorageMode) -> Result<Self> {
-        Ok(Self { transmissions: internal::RocksDB::open_map(N::ID, storage_mode, MapID::BFT(BFTMap::Transmissions))? })
+    pub fn open(_storage_mode: StorageMode) -> Result<Self> {
+        Ok(Self { transmissions: MemoryMap::default() })
     }
 
     /// Initializes a new BFT persistent storage service.
     #[cfg(any(test, feature = "test"))]
     pub fn open_testing(temp_dir: std::path::PathBuf, dev: Option<u16>) -> Result<Self> {
-        Ok(Self {
-            transmissions: internal::RocksDB::open_map_testing(temp_dir, dev, MapID::BFT(BFTMap::Transmissions))?,
-        })
+        Ok(Self { transmissions: MemoryMap::default() })
     }
 }
 

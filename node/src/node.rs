@@ -15,14 +15,7 @@
 use crate::{traits::NodeInterface, Client, Prover, Validator};
 use snarkos_account::Account;
 use snarkos_node_router::messages::NodeType;
-use snarkvm::prelude::{
-    block::Block,
-    store::helpers::{memory::ConsensusMemory, rocksdb::ConsensusDB},
-    Address,
-    Network,
-    PrivateKey,
-    ViewKey,
-};
+use snarkvm::prelude::{block::Block, store::helpers::memory::ConsensusMemory, Address, Network, PrivateKey, ViewKey};
 
 use aleo_std::StorageMode;
 use anyhow::Result;
@@ -30,11 +23,11 @@ use std::{net::SocketAddr, sync::Arc};
 
 pub enum Node<N: Network> {
     /// A validator is a full node, capable of validating blocks.
-    Validator(Arc<Validator<N, ConsensusDB<N>>>),
+    Validator(Arc<Validator<N, ConsensusMemory<N>>>),
     /// A prover is a light node, capable of producing proofs for consensus.
     Prover(Arc<Prover<N, ConsensusMemory<N>>>),
     /// A client node is a full node, capable of querying with the network.
-    Client(Arc<Client<N, ConsensusDB<N>>>),
+    Client(Arc<Client<N, ConsensusMemory<N>>>),
 }
 
 impl<N: Network> Node<N> {
