@@ -15,16 +15,25 @@
 use snarkos_cli::{commands::CLI, helpers::Updater};
 
 use clap::Parser;
-use std::process::exit;
+use std::{process::exit, thread::sleep, time::Duration};
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use tikv_jemallocator::Jemalloc;
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+use cap::Cap;
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: Cap<Jemalloc> = Cap::new(Jemalloc, 2 * 1024 * 1024 * 1024);
 
 fn main() -> anyhow::Result<()> {
+    std::thread::spawn(|| {
+        loop {
+            eprintln!("Allocated memory: {:?}", GLOBAL.allocated());
+            sleep(Duration::from_secs(60));
+        }
+    });
     // Parse the given arguments.
     let cli = CLI::parse();
     // Run the updater.
