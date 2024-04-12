@@ -25,7 +25,7 @@ use cap::Cap;
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[global_allocator]
-static GLOBAL: Cap<Jemalloc> = Cap::new(Jemalloc, 2 * 1024 * 1024 * 1024);
+static GLOBAL: Cap<Jemalloc> = Cap::new(Jemalloc, usize::max_value());
 
 fn main() -> anyhow::Result<()> {
     std::thread::spawn(|| {
