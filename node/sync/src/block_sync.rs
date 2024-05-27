@@ -235,6 +235,11 @@ impl<N: Network> BlockSync<N> {
             let current_height = self.canon.latest_block_height();
             // Try to advance the ledger with the sync pool.
             trace!("No block requests to send - try advancing with block responses (at block {current_height})");
+            {
+                let requests = self.requests.read();
+                let keys = requests.keys();
+                trace!("Requests: {keys:?}");
+            }
             self.try_advancing_with_block_responses(current_height);
             // Return early.
             return;
@@ -354,7 +359,9 @@ impl<N: Network> BlockSync<N> {
             }
             // Update the latest height.
             current_height = self.canon.latest_block_height();
+            trace!("Successfully advanced to block {current_height}");
         }
+        trace!("Next block response not (yet) available");
     }
 }
 
@@ -599,7 +606,9 @@ impl<N: Network> BlockSync<N> {
         let mut requests = self.requests.write();
 
         // Determine if the request is complete.
-        let is_request_complete = requests.get(&height).map(|(_, _, peer_ips)| peer_ips.is_empty()).unwrap_or(false);
+        let entry = requests.get(&height);
+        trace!("remove_block_response: got {entry:?} for {height}");
+        let is_request_complete = entry.map(|(_, _, peer_ips)| peer_ips.is_empty()).unwrap_or(false);
 
         // If the request is not complete, return early.
         if !is_request_complete {
@@ -646,6 +655,7 @@ impl<N: Network> BlockSync<N> {
 
             let retain = !peer_ips.is_empty() || responses.get(height).is_some();
             if !retain {
+                trace!("Removed block request timestamp for {peer_ip} at height {height}");
                 self.request_timestamps.write().remove(height);
             }
             retain
@@ -686,6 +696,8 @@ impl<N: Network> BlockSync<N> {
                 responses.remove(height);
                 // Increment the number of timed out block requests.
                 num_timed_out_block_requests += 1;
+            } else {
+                trace!("Block request {height} has not timed out: is_time_passed = {is_time_passed}, is_request_incomplete = {is_request_incomplete}");
             }
             // Retain if this is not a timeout.
             !is_timeout
